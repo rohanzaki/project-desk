@@ -64,6 +64,7 @@ with sync_playwright() as p:
     page.get_by_text('Please use the shared contract.',exact=True).wait_for()
     page.get_by_role('button',name='Acknowledge',exact=True).click()
     page.locator('.inbox .receipt').filter(has_text='Read by the owner').wait_for()
+    page.get_by_role('tab',name='Notes',exact=True).click()
     page.get_by_role('button',name='Add decision').click();page.get_by_label('Decision and reason').fill('Ship UI after contract review.');page.get_by_role('button',name='Save',exact=True).click()
     page.get_by_text('Ship UI after contract review.',exact=True).wait_for()
     row.get_by_role('button',name='Reassign',exact=True).click()

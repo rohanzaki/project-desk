@@ -1,18 +1,125 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Project Desk · the owner, Codex & Claude</title><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script></head>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#182329">
+  <title>Project Desk · the owner, Codex & Claude</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
 <body>
-<a class="skip-link" href="#work-title">Skip to work</a>
-<header><div class="brand"><span class="brand-mark">PD</span><div><h1>Project Desk<span class="dot">.</span></h1><p>the owner, Codex & Claude · live coordination</p></div></div><div class="connection"><span id="connection">Connecting…</span><div class="notification-wrap"><button id="notifications" type="button" aria-label="Notifications" aria-controls="notification-panel" aria-expanded="false"><svg class="notification-bell" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg>Alert center <span id="notification-count" hidden></span></button><div id="notification-panel" class="notification-panel" role="dialog" aria-label="Recent updates" hidden><div class="notification-head"><div><strong>Alert center</strong><span>Task, inbox, handoff, and changelog changes</span></div><button id="mark-seen" type="button">Mark seen</button></div><p id="notification-limit" class="notification-limit" hidden>Only the latest 100 activity events are available in this view.</p><div id="notification-list"></div></div></div><button id="refresh">Refresh</button></div></header>
-<main>
-<div class="intro"><div><span class="eyebrow">shared operating desk</span><h2>Know who owns it, who replied, and what changed.</h2><p>Ownership, handoffs, replies, receipts, and decisions in one readable control room.</p></div><label>Project<input id="project" value="media-intelligence" spellcheck="false"></label></div>
-<div id="notice" role="status" aria-live="polite"></div>
-<div class="layout"><section aria-labelledby="work-title"><div class="section-head"><h2 id="work-title">Work on the desk <span id="count"></span></h2><button id="new-task" class="primary">Add task</button></div>
-<div class="filters"><label>Status<select id="status-filter"><option value="active">Active work</option><option value="all">All work</option><option>QUEUED</option><option>RUNNING</option><option>BLOCKED</option><option>PAUSED</option><option>DONE</option></select></label><label>Find a task<input id="search" type="search" placeholder="Title, owner, or path"></label></div>
-<div id="tasks" class="task-list"></div><section class="sessions"><h2>Who's here</h2><p class="hint">Check-ins older than 15 minutes are stale. Their claims stay reserved.</p><div id="sessions"></div></section>
-</section>
-<aside><section class="inbox"><div class="section-head"><div><h2>Team inbox</h2><p class="hint">Showing the latest 200 messages.</p></div><button id="new-message">Write message</button></div><div id="messages"></div></section><section class="notebook"><div class="section-head"><h2>Decisions & notes</h2><div class="section-actions"><button id="publish-update" class="primary">Publish update</button><button id="new-note">Add decision</button></div></div><div id="notes"></div></section></aside></div>
-<details class="activity"><summary>Activity history</summary><div id="events"></div></details>
-</main>
-<footer>Shared local workspace · All times shown in PKT · A message receipt confirms reading, not approval.</footer>
-<dialog id="editor"><form id="editor-form"><div class="section-head"><h2 id="editor-title"></h2><button type="button" id="close-dialog" aria-label="Close dialog">✕</button></div><div id="editor-fields"></div><p id="form-error" role="alert"></p><div class="dialog-actions"><button type="button" id="cancel-dialog">Cancel</button><button type="submit" class="primary" id="save">Save</button></div></form></dialog>
-</body></html>
+  <a class="skip-link" href="#work-title">Skip to work</a>
+  <header>
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">PD</span>
+      <div><h1>Project Desk<span class="dot">.</span></h1><p>Live coordination workspace</p></div>
+    </div>
+    <nav class="top-nav" aria-label="Workspace sections">
+      <a href="#work-title" class="active">Tasks</a>
+      <a href="#team-inbox">Inbox</a>
+      <a href="#people-panel">Agents</a>
+      <a href="#activity-history">Activity</a>
+    </nav>
+    <div class="connection">
+      <span class="connection-state"><i aria-hidden="true"></i><span id="connection">Connecting…</span></span>
+      <div class="notification-wrap">
+        <button id="notifications" type="button" aria-label="Notifications" aria-controls="notification-panel" aria-expanded="false">
+          <svg class="notification-bell" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg>
+          <span class="button-label">Alerts</span><span id="notification-count" hidden></span>
+        </button>
+        <div id="notification-panel" class="notification-panel" role="dialog" aria-label="Recent updates" hidden>
+          <div class="notification-head"><div><strong>Alert center</strong><span>Tasks, inbox, handoffs, and releases</span></div><button id="mark-seen" type="button">Mark seen</button></div>
+          <p id="notification-limit" class="notification-limit" hidden>Only the latest 100 activity events are available in this view.</p>
+          <div id="notification-list"></div>
+        </div>
+      </div>
+      <button id="refresh" aria-label="Refresh Project Desk">Refresh</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="intro" aria-labelledby="page-title">
+      <div>
+        <span class="eyebrow">Shared operating desk</span>
+        <h2 id="page-title">Keep the next move visible.</h2>
+        <p>Ownership, blockers, handoffs, and decisions—without losing the thread.</p>
+      </div>
+      <label class="project-switcher">Project<input id="project" value="media-intelligence" spellcheck="false"></label>
+    </section>
+
+    <div id="notice" role="status" aria-live="polite"></div>
+
+    <section class="overview-strip" aria-label="Workload overview">
+      <button type="button" data-quick-status="active"><span>Active</span><strong id="metric-active">0</strong><small>open tasks</small></button>
+      <button type="button" data-quick-status="BLOCKED"><span>Blocked</span><strong id="metric-blocked">0</strong><small>need action</small></button>
+      <button type="button" data-quick-status="PAUSED"><span>Paused</span><strong id="metric-paused">0</strong><small>claims held</small></button>
+      <button type="button" data-quick-status="DONE"><span>Completed</span><strong id="metric-done">0</strong><small>recorded work</small></button>
+    </section>
+
+    <div class="layout">
+      <section class="work-column" aria-labelledby="work-title">
+        <div class="section-head work-heading">
+          <div><span class="section-kicker">Task workspace</span><h2 id="work-title">Work on the desk <span id="count"></span></h2></div>
+          <button id="new-task" class="primary">Add task</button>
+        </div>
+
+        <div class="filters" aria-label="Task filters">
+          <label class="search-field">Find a task<input id="search" type="search" placeholder="Title, owner, next step, or path"></label>
+          <label>Status<select id="status-filter"><option value="active">Active work</option><option value="all">All work</option><option>QUEUED</option><option>RUNNING</option><option>BLOCKED</option><option>PAUSED</option><option>DONE</option></select></label>
+          <label>Owner<select id="owner-filter"><option value="all">All owners</option></select></label>
+          <label>Task priority<select id="priority-filter"><option value="all">All priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option></select></label>
+          <label>Sort<select id="sort-tasks"><option value="updated">Recently updated</option><option value="priority">Priority first</option><option value="status">Status</option><option value="title">Title A–Z</option></select></label>
+          <label>Rows<select id="task-page-size"><option value="5">5</option><option value="10" selected>10</option><option value="20">20</option></select></label>
+        </div>
+
+        <div id="tasks" class="task-list"></div>
+        <nav id="task-pagination" class="pagination" aria-label="Task pages"></nav>
+      </section>
+
+      <aside class="desk-rail" aria-label="Team context">
+        <div class="rail-tabs" role="tablist" aria-label="Team context views">
+          <button type="button" role="tab" aria-selected="true" data-rail-tab="inbox">Inbox <span id="message-tab-count"></span></button>
+          <button type="button" role="tab" aria-selected="false" data-rail-tab="notes">Notes</button>
+          <button type="button" role="tab" aria-selected="false" data-rail-tab="people">Agents</button>
+        </div>
+
+        <section id="team-inbox" class="inbox rail-panel active" data-rail-panel="inbox">
+          <div class="section-head"><div><h2>Team inbox</h2><p class="hint">Recent shared messages and task conversations.</p></div><button id="new-message">Write message</button></div>
+          <div id="messages"></div>
+          <nav id="message-pagination" class="pagination compact" aria-label="Inbox pages"></nav>
+        </section>
+
+        <section class="notebook rail-panel" data-rail-panel="notes" hidden>
+          <div class="section-head"><div><h2>Decisions & notes</h2><p class="hint">Durable context for the whole team.</p></div><div class="section-actions"><button id="publish-update" class="primary">Publish update</button><button id="new-note">Add decision</button></div></div>
+          <div id="notes"></div>
+          <nav id="note-pagination" class="pagination compact" aria-label="Note pages"></nav>
+        </section>
+
+        <section id="people-panel" class="people-panel rail-panel" data-rail-panel="people" hidden>
+          <div class="section-head"><div><h2>Who’s here</h2><p class="hint">Stale check-ins keep their claims reserved.</p></div></div>
+          <div id="sessions"></div>
+          <nav id="session-pagination" class="pagination compact" aria-label="Agent pages"></nav>
+        </section>
+      </aside>
+    </div>
+
+    <details id="activity-history" class="activity">
+      <summary><span>Activity history</span><small>Audit trail for recent coordination events</small></summary>
+      <div id="events"></div>
+      <nav id="event-pagination" class="pagination" aria-label="Activity pages"></nav>
+    </details>
+  </main>
+
+  <footer>Shared local workspace · All times shown in PKT · A receipt confirms reading, not approval.</footer>
+
+  <dialog id="editor">
+    <form id="editor-form">
+      <div class="section-head"><h2 id="editor-title"></h2><button type="button" id="close-dialog" aria-label="Close dialog">✕</button></div>
+      <div id="editor-fields"></div>
+      <p id="form-error" role="alert"></p>
+      <div class="dialog-actions"><button type="button" id="cancel-dialog">Cancel</button><button type="submit" class="primary" id="save">Save</button></div>
+    </form>
+  </dialog>
+</body>
+</html>

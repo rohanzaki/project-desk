@@ -183,6 +183,7 @@ def test_team_inbox_reply_and_reassignment_are_explicit(isolated_service):
         assert reply["task_id"] == service["task"]["id"]
         assert reply["recipient"] == service["claude"]["session_id"]
 
+        page.get_by_role("tab", name="Notes", exact=True).click()
         page.get_by_role("button", name="Publish update", exact=True).click()
         expect(page.get_by_role("heading", name="Publish a progress update")).to_be_visible()
         page.get_by_label("Update title", exact=True).fill("Capture review update")
