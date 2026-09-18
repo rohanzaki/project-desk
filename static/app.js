@@ -223,7 +223,9 @@ function taskCard(task,expanded=false){
       ${task.pending_owner?`<div class="imported">Handoff offered to ${esc(name(task.pending_owner))}; awaiting acceptance</div>`:''}
       ${handoffBrief(task)}
       ${discussion(task)}
-      ${task.status!=='DONE'?`<div class="actions"><button data-action="${task.human_paused?'resume':'pause'}">${task.human_paused?'Resume':'Pause'}</button><button data-action="priority">Set priority</button><button data-action="reassign">Reassign</button><button data-action="close">Close with note</button></div>`:''}
+      ${task.status==='DONE'
+        ? '<div class="actions"><button class="reopen-action" data-action="reopen">Reopen &amp; reassign</button></div>'
+        : `<div class="actions"><button data-action="${task.human_paused?'resume':'pause'}">${task.human_paused?'Resume':'Pause'}</button><button data-action="priority">Set priority</button><button data-action="reassign">Reassign</button><button data-action="close">Close with note</button></div>`}
     </details>
   </article>`;
 }
@@ -369,6 +371,13 @@ $('#tasks').addEventListener('click',event=>{
   else if(action==='reassign'){
     const options=[{value:'',label:'Select a receiving session…',disabled:true},...activeSessions().map(session=>({value:session.id,label:sessionLabel(session.id)}))];
     openEditor('Reassign ownership',field('Receiving session','session_id','select','',options)+field('Reason / agreed handoff','reason','textarea'),data=>mutate(action,{...base,...data}));
+  }else if(action==='reopen'){
+    const options=[{value:'',label:'Select a receiving session…',disabled:true},...activeSessions().map(session=>({value:session.id,label:sessionLabel(session.id)}))];
+    openEditor('Reopen & reassign completed task',
+      '<p class="dialog-hint">The prior completion evidence stays attached. Reopening reacquires the recorded paths and starts a new work cycle with the selected agent.</p>'+
+      field('Receiving session','session_id','select','',options)+
+      field('What should happen next','next_step','textarea'),
+      data=>mutate(action,{...base,...data}));
   }else if(action==='close')openEditor('Close task and release its claims',field('Outcome or cancellation reason','summary','textarea'),data=>mutate(action,{...base,...data}));
   else openEditor(action==='pause'?'Pause this task':'Resume this task',`<p>${esc(task.title)}</p><p>${action==='pause'?'Claims stay reserved. The agent must check in to see your pause.':'This releases your pause instruction; it does not start an agent automatically.'}</p>`,()=>mutate(action,base));
 });

@@ -511,7 +511,24 @@ class Store:
             t=self.task(c,data['task_id'])
             if t['project']!=project: raise ValueError('Wrong project')
             if t['version']!=data['version']: raise Conflict('Task changed; refresh before acting')
-            if t['status']=='DONE': raise Conflict('Completed task; create follow-up work')
+            if action=='reopen':
+                if t['status']!='DONE': raise Conflict('Only completed tasks can be reopened')
+                target=c.execute('SELECT * FROM sessions WHERE id=? AND project=? AND imported=0',(data['session_id'],project)).fetchone()
+                if not target: raise ValueError('Choose a registered session in this project')
+                next_step=text(data.get('next_step',''),'next step')
+                # Completion releases claims. Reopening reacquires the exact
+                # recorded scope atomically, so a finished task cannot quietly
+                # resume on top of another agent's newer work.
+                self.claim_resources(c,project,t['id'],t['resources'])
+                c.execute("UPDATE handoff_briefs SET status='superseded' WHERE task_id=? AND status='offered'",(t['id'],))
+                c.execute("""UPDATE tasks SET owner=?,assigned_to='',status='RUNNING',next_step=?,
+                           human_paused=0,imported=0,pending_owner=NULL WHERE id=?""",
+                          (target['id'],next_step,t['id']))
+                c.execute('UPDATE tasks SET version=version+1,updated=? WHERE id=?',(now(),t['id']))
+                self.event(c,project,'rohan','task.reopened',{
+                    'task_id':t['id'],'session_id':target['id'],'next_step':next_step})
+                return self.task(c,t['id'])
+            if t['status']=='DONE': raise Conflict('Completed task; use Reopen & reassign')
             if action=='pause':
                 c.execute("UPDATE tasks SET status='PAUSED',human_paused=1,pending_owner=NULL WHERE id=?",(t['id'],))
                 c.execute("UPDATE handoff_briefs SET status='paused' WHERE task_id=? AND status='offered'",(t['id'],))

@@ -229,6 +229,49 @@ def test_team_inbox_reply_and_reassignment_are_explicit(isolated_service):
         browser.close()
 
 
+def test_completed_task_can_be_reopened_and_reassigned(isolated_service):
+    service = isolated_service
+    completed = service["desk"].human("media-intelligence", "close", {
+        "task_id": service["task"]["id"],
+        "version": service["task"]["version"],
+        "summary": "Initial capture review is complete",
+    })
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        page.goto(service["base"])
+        page.wait_for_load_state("networkidle")
+        page.get_by_role("button", name="Completed", exact=False).click()
+
+        task_card = page.locator("article.task").filter(has_text="Capture review")
+        details = task_card.locator("details.task-body")
+        if details.get_attribute("open") is None:
+            details.locator("summary").click()
+        expect(details).to_have_attribute("open", "")
+        reopen_button = task_card.locator('[data-action="reopen"]')
+        expect(reopen_button).to_be_visible()
+        expect(reopen_button).to_have_text("Reopen & reassign")
+        reopen_button.click()
+        expect(page.get_by_role("heading", name="Reopen & reassign completed task")).to_be_visible()
+        receiving = page.get_by_role("combobox", name="Receiving session", exact=True)
+        option = receiving.locator("option").filter(has_text="Claude Browser").get_attribute("value")
+        receiving.select_option(option)
+        page.get_by_label("What should happen next", exact=True).fill("Review the new follow-up evidence")
+        page.get_by_role("button", name="Save", exact=True).click()
+
+        page.get_by_role("button", name="Active", exact=False).click()
+        task_card = page.locator("article.task").filter(has_text="Capture review")
+        expect(task_card.locator(".task-top").get_by_text("Claude Browser", exact=False)).to_be_visible()
+        expect(task_card.locator(".badge")).to_have_text("RUNNING")
+        reopened = next(t for t in service["desk"].snapshot("media-intelligence")["tasks"] if t["id"] == completed["id"])
+        assert reopened["owner"] == service["claude"]["session_id"]
+        assert reopened["next_step"] == "Review the new follow-up evidence"
+        assert reopened["summary"] == "Initial capture review is complete"
+        assert reopened["version"] == completed["version"] + 1
+        browser.close()
+
+
 def test_notification_bell_tracks_external_updates_without_receipts(isolated_service):
     service = isolated_service
     with sync_playwright() as playwright:

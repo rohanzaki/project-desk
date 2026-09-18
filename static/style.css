@@ -162,6 +162,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .task pre,.event pre{margin:0;font:10px/1.55 "SFMono-Regular","Cascadia Code","Roboto Mono",monospace;white-space:pre-wrap;overflow-wrap:anywhere;color:#40504e}
 .actions{display:flex;gap:7px;flex-wrap:wrap;margin:12px 14px 0 56px}
 .actions button,.section-actions button{font-size:11px;padding:6px 8px}
+.actions .reopen-action{color:#fff;background:var(--blue);border-color:var(--blue)}
+.actions .reopen-action:hover{filter:brightness(.94)}
+.dialog-hint{margin:0 0 12px;padding:10px 12px;border:1px solid #ccd8f1;border-radius:8px;background:var(--blue-soft);color:#40506f;font-size:11px;line-height:1.45}
 
 .agent-chip{--agent:#6b746f;--agent-bg:#edf0ea;display:inline-flex;align-items:center;gap:5px;max-width:100%;color:var(--agent);background:var(--agent-bg);border:1px solid color-mix(in srgb,var(--agent) 24%,transparent);border-radius:999px;padding:2px 7px 2px 3px;font-size:10px;font-weight:820;line-height:1;vertical-align:middle}
 .agent-avatar{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:999px;color:#fff;background:var(--agent);font-size:8px;letter-spacing:.04em;font-variant-numeric:tabular-nums}
