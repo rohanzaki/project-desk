@@ -22,6 +22,14 @@
 - Native VS Code Codex app-server discovery reports all five Project Desk hook
   definitions enabled and trusted, with no discovery warnings/errors. Existing
   GSD SessionStart was retained. Claude settings retain unrelated handlers.
+- Local service update from implementation commit `7415d84` reports health
+  version `1.1.0`; all four new MCP tools are discoverable. A consistent private
+  SQLite backup was taken first. The 11 sessions, 9 tasks, 7 messages and 49
+  existing event IDs survived; database integrity is `ok`.
+- Live `enable_notifications` authenticated the existing root session and
+  returned its idempotent binding. A manual hook smoke check against the live
+  service passed using a temporary copy of that binding. This deliberately did
+  not mark the real IDE binding as executed or acknowledge any peer message.
 
 Activation boundary: installation, trust and private enrollment do not prove an
 already-open IDE process executed a hook. Actual peer acknowledgment remains
