@@ -1,0 +1,15 @@
+[Unit]
+Description=Project Desk shared Codex and Claude coordination
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/mi-coordination/project-desk
+ExecStart=/path/to/mi-coordination/project-desk/.venv/bin/python /path/to/mi-coordination/project-desk/server.py
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

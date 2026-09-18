@@ -1,0 +1,373 @@
+"""Transactional coordination store. No filesystem edits or deployment execution."""
+import hashlib
+import json
+import re
+import secrets
+import sqlite3
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from pathlib import Path
+from uuid import uuid4
+
+
+class Conflict(ValueError):
+    pass
+
+
+def now():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def ident(prefix):
+    return prefix + uuid4().hex[:12]
+
+
+def text(value, label, limit=12000):
+    if not isinstance(value, str) or not value.strip() or len(value) > limit:
+        raise ValueError(f'{label} must contain 1–{limit} characters')
+    return value.strip()
+
+
+def scopes(values):
+    if not isinstance(values, list) or not values or len(values) > 100:
+        raise ValueError('Supply 1–100 relative file/directory paths or service:name resources')
+    result = []
+    for value in values:
+        value = text(value, 'resource', 500).replace('\\', '/')
+        if value.startswith('service:'):
+            if not re.fullmatch(r'service:[a-zA-Z0-9_.:-]+', value):
+                raise ValueError('Invalid service resource')
+        else:
+            if value.startswith('/') or ':' in value or any(c in value for c in '*?'):
+                raise ValueError('Use literal repo-relative paths, not absolute paths or globs')
+            parts = value.split('/')
+            if '..' in parts:
+                raise ValueError('Parent traversal is not a valid resource')
+            value = '/'.join(p for p in parts if p and p != '.') or '.'
+        result.append(value)
+    return sorted(set(result))
+
+
+def overlaps(a, b):
+    if a.startswith('service:') or b.startswith('service:'):
+        return a == b
+    return a == '.' or b == '.' or a == b or a.startswith(b + '/') or b.startswith(a + '/')
+
+
+class Store:
+    def __init__(self, path):
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.connection() as c:
+            c.executescript('''
+                PRAGMA journal_mode=WAL;
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id TEXT PRIMARY KEY, secret_hash TEXT NOT NULL, name TEXT NOT NULL,
+                    kind TEXT NOT NULL, project TEXT NOT NULL, branch TEXT NOT NULL,
+                    worktree TEXT NOT NULL, last_seen TEXT NOT NULL, imported INTEGER DEFAULT 0);
+                CREATE TABLE IF NOT EXISTS tasks (
+                    id TEXT PRIMARY KEY, project TEXT NOT NULL, title TEXT NOT NULL,
+                    owner TEXT, assigned_to TEXT NOT NULL DEFAULT '', status TEXT NOT NULL,
+                    priority TEXT NOT NULL DEFAULT 'normal', resources TEXT NOT NULL,
+                    next_step TEXT NOT NULL DEFAULT '', summary TEXT NOT NULL DEFAULT '',
+                    validation TEXT NOT NULL DEFAULT '', commit_ref TEXT NOT NULL DEFAULT '',
+                    deployment TEXT NOT NULL DEFAULT 'not_deployed', version INTEGER NOT NULL DEFAULT 1,
+                    updated TEXT NOT NULL, human_paused INTEGER NOT NULL DEFAULT 0,
+                    imported INTEGER NOT NULL DEFAULT 0, pending_owner TEXT,
+                    FOREIGN KEY(owner) REFERENCES sessions(id));
+                CREATE TABLE IF NOT EXISTS claims (
+                    project TEXT NOT NULL, resource TEXT NOT NULL, task_id TEXT NOT NULL,
+                    PRIMARY KEY(project, resource, task_id), FOREIGN KEY(task_id) REFERENCES tasks(id));
+                CREATE TABLE IF NOT EXISTS messages (
+                    id TEXT PRIMARY KEY, project TEXT NOT NULL, sender TEXT NOT NULL,
+                    recipient TEXT NOT NULL, body TEXT NOT NULL, task_id TEXT, created TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS receipts (
+                    message_id TEXT NOT NULL, session_id TEXT NOT NULL, acknowledged TEXT NOT NULL,
+                    PRIMARY KEY(message_id, session_id));
+                CREATE TABLE IF NOT EXISTS notes (
+                    id TEXT PRIMARY KEY, project TEXT NOT NULL, author TEXT NOT NULL,
+                    kind TEXT NOT NULL, body TEXT NOT NULL, created TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS events (
+                    seq INTEGER PRIMARY KEY AUTOINCREMENT, project TEXT NOT NULL,
+                    actor TEXT NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL, created TEXT NOT NULL);
+            ''')
+        self.path.chmod(0o600)
+
+    @contextmanager
+    def connection(self, write=False):
+        c = sqlite3.connect(self.path, timeout=15)
+        c.row_factory = sqlite3.Row
+        c.execute('PRAGMA foreign_keys=ON')
+        try:
+            if write:
+                c.execute('BEGIN IMMEDIATE')
+            yield c
+            c.commit()
+        except Exception:
+            c.rollback()
+            raise
+        finally:
+            c.close()
+
+    def event(self, c, project, actor, kind, data):
+        c.execute('INSERT INTO events(project,actor,kind,data,created) VALUES(?,?,?,?,?)',
+                  (project, actor, kind, json.dumps(data), now()))
+
+    def auth(self, c, key):
+        digest = hashlib.sha256(key.encode()).hexdigest()
+        row = c.execute('SELECT * FROM sessions WHERE secret_hash=?', (digest,)).fetchone()
+        if not row:
+            raise PermissionError('Unknown session key; register a session first')
+        c.execute('UPDATE sessions SET last_seen=? WHERE id=?', (now(), row['id']))
+        return dict(row)
+
+    def register(self, name, kind, project, branch, worktree):
+        if kind not in ('codex', 'claude'):
+            raise ValueError('Agent kind must be codex or claude')
+        text(project, 'project', 100)
+        if not re.fullmatch(r'[a-z0-9][a-z0-9-]*', project):
+            raise ValueError('Use a lowercase project slug')
+        if not Path(worktree).is_absolute():
+            raise ValueError('Worktree must be an absolute path')
+        key, sid = secrets.token_urlsafe(32), ident('s-')
+        with self.connection(True) as c:
+            c.execute('INSERT INTO sessions VALUES(?,?,?,?,?,?,?,?,0)',
+                      (sid, hashlib.sha256(key.encode()).hexdigest(), text(name,'name',120), kind,
+                       project, text(branch,'branch',250), text(worktree,'worktree',1000), now()))
+            self.event(c, project, sid, 'session.registered', {'name': name, 'kind': kind})
+        return {'session_id': sid, 'session_key': key,
+                'instruction': 'Keep the key private for this session; use check_in before edits and at milestones.'}
+
+    def task(self, c, task_id):
+        row = c.execute('SELECT * FROM tasks WHERE id=?', (task_id,)).fetchone()
+        if not row:
+            raise ValueError('Task not found')
+        obj = dict(row)
+        obj['resources'] = json.loads(obj['resources'])
+        return obj
+
+    def claim_resources(self, c, project, task_id, resources):
+        for existing in c.execute("SELECT * FROM claims WHERE (project=? OR resource LIKE 'service:%') AND task_id!=?", (project, task_id)):
+            if any(overlaps(resource, existing['resource']) for resource in resources):
+                raise Conflict(f"Resource overlaps {existing['resource']} held by {existing['task_id']}. Request a handoff; do not edit.")
+        c.execute('DELETE FROM claims WHERE task_id=?', (task_id,))
+        c.executemany('INSERT INTO claims VALUES(?,?,?)', [(project,r,task_id) for r in resources])
+
+    def own(self, c, key, task_id, version):
+        session = self.auth(c, key)
+        task = self.task(c, task_id)
+        if session['id'] != task['owner']:
+            raise PermissionError('Only the task owner can update this task')
+        if version != task['version']:
+            raise Conflict('Task changed; check_in and use its latest version')
+        return session, task
+
+    def claim(self, key, title, resources, next_step, task_id=None):
+        resources = scopes(resources)
+        with self.connection(True) as c:
+            s = self.auth(c, key)
+            if task_id:
+                t = self.task(c, task_id)
+                if t['project'] != s['project'] or t['owner'] or t['status'] != 'QUEUED':
+                    raise Conflict('Task is not an unowned queued task in your project')
+                if t['assigned_to'] not in ('', s['kind'], s['id']):
+                    raise Conflict('Task is assigned to another agent')
+                if t['human_paused']:
+                    raise Conflict('the owner paused this task')
+                # Preserve the queued scope; expanding it requires an explicit update later.
+                if resources != t['resources']:
+                    raise Conflict('Claim the queued task using its exact resources')
+                c.execute("UPDATE tasks SET owner=?,status='RUNNING',updated=?,version=version+1 WHERE id=?",
+                          (s['id'], now(), task_id))
+            else:
+                task_id = ident('t-')
+                c.execute('''INSERT INTO tasks(id,project,title,owner,status,resources,next_step,updated)
+                             VALUES(?,?,?,?,'RUNNING',?,?,?)''',
+                          (task_id,s['project'],text(title,'title',300),s['id'],json.dumps(resources),
+                           text(next_step,'next step'),now()))
+            self.claim_resources(c, s['project'], task_id, resources)
+            self.event(c,s['project'],s['id'],'task.claimed', {'task_id': task_id, 'resources':resources})
+            return self.task(c, task_id)
+
+    def update(self, key, task_id, version, status, next_step, summary='', validation='', commit_ref='',
+               deployment='not_deployed', resources=None):
+        if status not in ('RUNNING','BLOCKED','PAUSED','DONE'):
+            raise ValueError('Invalid task status')
+        if deployment not in ('not_deployed','not_applicable','deployed','failed'):
+            raise ValueError('Invalid deployment state')
+        if status == 'DONE':
+            text(summary,'completion summary'); text(validation,'validation evidence')
+        else:
+            text(next_step,'next step')
+        with self.connection(True) as c:
+            s,t = self.own(c,key,task_id,version)
+            if t['human_paused'] and status != 'PAUSED':
+                raise Conflict('the owner paused this task; only the owner can resume or close it')
+            if t['status'] == 'DONE':
+                raise Conflict('Completed tasks are immutable; create a follow-up task')
+            new_resources = scopes(resources) if resources is not None else t['resources']
+            if status == 'DONE':
+                c.execute('DELETE FROM claims WHERE task_id=?',(task_id,))
+            else:
+                self.claim_resources(c,s['project'],task_id,new_resources)
+            c.execute('''UPDATE tasks SET status=?,next_step=?,summary=?,validation=?,commit_ref=?,deployment=?,
+                         resources=?,version=version+1,updated=?,pending_owner=NULL WHERE id=?''',
+                      (status,next_step,summary,validation,commit_ref,deployment,json.dumps(new_resources),now(),task_id))
+            self.event(c,s['project'],s['id'],'task.updated',
+                       {'task_id':task_id,'status':status,'summary':summary,'validation':validation,'next_step':next_step})
+            return self.task(c,task_id)
+
+    def handoff(self, key, task_id, version, target_session, accept=False):
+        with self.connection(True) as c:
+            s = self.auth(c,key); t = self.task(c,task_id)
+            if t['version'] != version or t['status'] == 'DONE' or t['human_paused']:
+                raise Conflict('Task changed, completed, or paused by the owner')
+            if accept:
+                if t['pending_owner'] != s['id']:
+                    raise PermissionError('No handoff addressed to this session')
+                c.execute('UPDATE tasks SET owner=?,pending_owner=NULL,version=version+1,updated=? WHERE id=?',
+                          (s['id'],now(),task_id))
+            else:
+                if t['owner'] != s['id']:
+                    raise PermissionError('Only the owner can offer a handoff')
+                target=c.execute('SELECT * FROM sessions WHERE id=? AND project=? AND imported=0',
+                                 (target_session,s['project'])).fetchone()
+                if not target or target_session == s['id']:
+                    raise ValueError('Target must be another registered session in this project')
+                c.execute('UPDATE tasks SET pending_owner=?,version=version+1,updated=? WHERE id=?',
+                          (target_session,now(),task_id))
+            self.event(c,t['project'],s['id'],'handoff.accepted' if accept else 'handoff.offered',
+                       {'task_id':task_id,'target':target_session})
+            return self.task(c,task_id)
+
+    def recipient_matches(self, s, recipient):
+        return recipient in ('all', s['kind'], s['id'])
+
+    def message(self, key, recipient, body, task_id=None):
+        with self.connection(True) as c:
+            s=self.auth(c,key)
+            return self._message(c,s['project'],s['id'],recipient,body,task_id)
+
+    def _message(self,c,project,sender,recipient,body,task_id=None):
+        if recipient not in ('all','codex','claude','rohan'):
+            if not c.execute('SELECT 1 FROM sessions WHERE id=? AND project=?',(recipient,project)).fetchone():
+                raise ValueError('Unknown recipient in this project')
+        if task_id and self.task(c,task_id)['project'] != project:
+            raise ValueError('Task belongs to another project')
+        mid=ident('m-')
+        c.execute('INSERT INTO messages VALUES(?,?,?,?,?,?,?)',
+                  (mid,project,sender,recipient,text(body,'message'),task_id,now()))
+        self.event(c,project,sender,'message.sent',{'message_id':mid,'recipient':recipient})
+        return {'message_id':mid,'status':'sent','acknowledged':False}
+
+    def acknowledge(self,key,message_id):
+        with self.connection(True) as c:
+            s=self.auth(c,key)
+            m=c.execute('SELECT * FROM messages WHERE id=?',(message_id,)).fetchone()
+            if not m or m['project'] != s['project'] or not self.recipient_matches(s,m['recipient']):
+                raise PermissionError('This message is not addressed to your session')
+            c.execute('INSERT OR IGNORE INTO receipts VALUES(?,?,?)',(message_id,s['id'],now()))
+            self.event(c,s['project'],s['id'],'message.acknowledged',{'message_id':message_id})
+            return {'message_id':message_id,'acknowledged_by':s['id']}
+
+    def note(self,key,body,kind='note'):
+        if kind not in ('note','proposal','finding'):
+            raise ValueError('Agents can post notes, findings, or proposals. the owner records decisions.')
+        with self.connection(True) as c:
+            s=self.auth(c,key)
+            return self._note(c,s['project'],s['id'],body,kind)
+
+    def _note(self,c,project,author,body,kind):
+        nid=ident('n-')
+        c.execute('INSERT INTO notes VALUES(?,?,?,?,?,?)',(nid,project,author,kind,text(body,'note'),now()))
+        self.event(c,project,author,'note.created',{'note_id':nid,'kind':kind})
+        return {'note_id':nid}
+
+    def check_in(self,key,since=0):
+        if since < 0:
+            raise ValueError('Cursor must be nonnegative')
+        with self.connection(True) as c:
+            s=self.auth(c,key)
+            events=[dict(r) for r in c.execute('SELECT * FROM events WHERE project=? AND seq>? ORDER BY seq LIMIT 100',
+                                              (s['project'],since))]
+            for e in events: e['data']=json.loads(e['data'])
+            inbox=[dict(r) for r in c.execute('''SELECT m.* FROM messages m WHERE project=?
+                AND recipient IN ('all',?,?) AND sender!=? AND NOT EXISTS
+                (SELECT 1 FROM receipts r WHERE r.message_id=m.id AND r.session_id=?) ORDER BY created LIMIT 100''',
+                (s['project'],s['kind'],s['id'],s['id'],s['id']))]
+            # Cursor advances only over events actually returned.
+            return {'session_id':s['id'],'cursor':events[-1]['seq'] if events else since,
+                    'events':events,'inbox':inbox, 'board':self._snapshot(c,s['project'])}
+
+    def _snapshot(self,c,project):
+        sessions=[dict(r) for r in c.execute('SELECT id,name,kind,project,branch,worktree,last_seen,imported FROM sessions WHERE project=?',(project,))]
+        for s in sessions:
+            s['stale']=(datetime.now(timezone.utc)-datetime.fromisoformat(s['last_seen'])).total_seconds()>900
+        tasks=[self.task(c,r['id']) for r in c.execute('SELECT id FROM tasks WHERE project=? ORDER BY updated DESC',(project,))]
+        messages=[dict(r) for r in c.execute('SELECT * FROM messages WHERE project=? ORDER BY created DESC LIMIT 200',(project,))]
+        for m in messages:
+            m['acknowledgments']=[dict(r) for r in c.execute('SELECT session_id,acknowledged FROM receipts WHERE message_id=?',(m['id'],))]
+        return {'project':project,'sessions':sessions,'tasks':tasks,'messages':messages,
+                'notes':[dict(r) for r in c.execute('SELECT * FROM notes WHERE project=? ORDER BY created DESC LIMIT 100',(project,))],
+                'events':[dict(r) for r in c.execute('SELECT * FROM events WHERE project=? ORDER BY seq DESC LIMIT 100',(project,))],
+                'generated_at':now()}
+
+    def snapshot(self,project):
+        with self.connection() as c: return self._snapshot(c,project)
+
+    def human(self,project,action,data):
+        with self.connection(True) as c:
+            if action=='create':
+                resources=scopes(data['resources']); tid=ident('t-')
+                if data.get('assigned_to','') not in ('','codex','claude'):
+                    raise ValueError('Assign queued work to codex, claude, or either')
+                c.execute('''INSERT INTO tasks(id,project,title,assigned_to,status,resources,next_step,updated)
+                    VALUES(?,?,?,?,'QUEUED',?,?,?)''',
+                    (tid,project,text(data['title'],'title',300),data.get('assigned_to',''),json.dumps(resources),
+                     text(data['next_step'],'next step'),now()))
+                self.event(c,project,'rohan','task.queued',{'task_id':tid})
+                return self.task(c,tid)
+            if action=='message': return self._message(c,project,'rohan',data['recipient'],data['body'],data.get('task_id'))
+            if action=='note': return self._note(c,project,'rohan',data['body'],'decision')
+            if action=='ack':
+                m=c.execute("SELECT * FROM messages WHERE id=? AND project=? AND recipient IN ('rohan','all')",(data['message_id'],project)).fetchone()
+                if not m: raise ValueError('Message not addressed to the owner')
+                c.execute('INSERT OR IGNORE INTO receipts VALUES(?,?,?)',(m['id'],'rohan',now()))
+                self.event(c,project,'rohan','message.acknowledged',{'message_id':m['id']})
+                return {'ok':True}
+            t=self.task(c,data['task_id'])
+            if t['project']!=project: raise ValueError('Wrong project')
+            if t['version']!=data['version']: raise Conflict('Task changed; refresh before acting')
+            if t['status']=='DONE': raise Conflict('Completed task; create follow-up work')
+            if action=='pause':
+                c.execute("UPDATE tasks SET status='PAUSED',human_paused=1,pending_owner=NULL WHERE id=?",(t['id'],))
+            elif action=='resume':
+                c.execute('UPDATE tasks SET status=?,human_paused=0 WHERE id=?',('RUNNING' if t['owner'] else 'QUEUED',t['id']))
+            elif action=='priority':
+                if data['priority'] not in ('normal','high','urgent'): raise ValueError('Invalid priority')
+                c.execute('UPDATE tasks SET priority=? WHERE id=?',(data['priority'],t['id']))
+            elif action=='reassign':
+                target=c.execute('SELECT * FROM sessions WHERE id=? AND project=? AND imported=0',(data['session_id'],project)).fetchone()
+                if not target: raise ValueError('Choose a registered session in this project')
+                text(data.get('reason',''),'handoff reason')
+                self.claim_resources(c,project,t['id'],t['resources'])
+                c.execute("UPDATE tasks SET owner=?,imported=0,pending_owner=NULL,status=CASE WHEN status='QUEUED' THEN 'RUNNING' ELSE status END WHERE id=?",(target['id'],t['id']))
+            elif action=='close':
+                text(data.get('summary',''),'closure reason')
+                c.execute("UPDATE tasks SET status='DONE',summary=?,validation='Closed by the owner; not a test result',pending_owner=NULL WHERE id=?",(data['summary'],t['id']))
+                c.execute('DELETE FROM claims WHERE task_id=?',(t['id'],))
+            else: raise ValueError('Unknown action')
+            c.execute('UPDATE tasks SET version=version+1,updated=? WHERE id=?',(now(),t['id']))
+            self.event(c,project,'rohan','task.'+action,data)
+            return self.task(c,t['id'])
+
+    def backup(self,directory):
+        directory=Path(directory); directory.mkdir(parents=True,exist_ok=True)
+        destination=directory / ('desk-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')+'.sqlite3')
+        with self.connection() as src:
+            dst=sqlite3.connect(destination)
+            try: src.backup(dst)
+            finally: dst.close()
+        destination.chmod(0o600)
+        for old in sorted(directory.glob('desk-*.sqlite3'))[:-48]: old.unlink()
+        return destination

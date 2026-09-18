@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Project Desk · the owner, Codex & Claude</title><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script></head>
+<body>
+<header><div><h1>Project Desk<span class="dot">.</span></h1><p>the owner, Codex & Claude</p></div><div class="connection"><span id="connection">Connecting…</span><button id="refresh">Refresh</button></div></header>
+<main>
+<div class="intro"><div><h2>One project. A shared view.</h2><p>Ownership, handoffs, and the decisions that keep work moving.</p></div><label>Project<input id="project" value="media-intelligence" spellcheck="false"></label></div>
+<div id="notice" role="status" aria-live="polite"></div>
+<div class="layout"><section aria-labelledby="work-title"><div class="section-head"><h2 id="work-title">Work on the desk <span id="count"></span></h2><button id="new-task" class="primary">Add task</button></div>
+<div class="filters"><label>Status<select id="status-filter"><option value="active">Active work</option><option value="all">All work</option><option>QUEUED</option><option>RUNNING</option><option>BLOCKED</option><option>PAUSED</option><option>DONE</option></select></label><label>Find a task<input id="search" type="search" placeholder="Title, owner, or path"></label></div>
+<div id="tasks" class="task-list"></div><section class="sessions"><h2>Who's here</h2><p class="hint">Check-ins older than 15 minutes are stale. Their claims stay reserved.</p><div id="sessions"></div></section>
+</section>
+<aside><section class="inbox"><div class="section-head"><h2>Team inbox</h2><button id="new-message">Write message</button></div><div id="messages"></div></section><section class="notebook"><div class="section-head"><h2>Decisions & notes</h2><button id="new-note">Add decision</button></div><div id="notes"></div></section></aside></div>
+<details class="activity"><summary>Activity history</summary><div id="events"></div></details>
+</main>
+<footer>Shared local workspace · All times shown in PKT · A message receipt confirms reading, not approval.</footer>
+<dialog id="editor"><form id="editor-form"><div class="section-head"><h2 id="editor-title"></h2><button type="button" id="close-dialog" aria-label="Close dialog">✕</button></div><div id="editor-fields"></div><p id="form-error" role="alert"></p><div class="dialog-actions"><button type="button" id="cancel-dialog">Cancel</button><button type="submit" class="primary" id="save">Save</button></div></form></dialog>
+</body></html>
