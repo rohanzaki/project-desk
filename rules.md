@@ -90,6 +90,29 @@ After verified Project Desk feature changes, use `publish_update` to record the
 commit, evidence and activation instructions in the changelog and Team Inbox.
 The dashboard bell's seen marker is separate from each agent's read receipt.
 
+## Shared GSD project knowledge
+
+The maintained onboarding checkout is `/path/to/mi-gsd-onboarding`
+(`feat/gsd-onboarding`, isolated Linux clone). From any application worktree,
+read its `docs/engineering/README.md` and `.planning/STATE.md` before planning.
+The seven `.planning/codebase/` maps cover architecture, structure, stack,
+integrations, conventions, testing and concerns. Use
+`docs/engineering/DESIGN-SYSTEM.md` for existing tokens, components and branding;
+`FILE-INDEX.json` is a path inventory, not proof every file was semantically read.
+
+Run `python3 scripts/gsd/context.py check` inside that onboarding checkout.
+It compares local Git state only. Before application work, verify the current
+deployment/source baseline through the working notes, obtain the commit locally,
+and run `check --against <verified-commit>`. Read the affected code before updating
+map/index stamps. Check Project Desk for parallel unpublished work; a deployment
+marker does not include a peer's uncommitted changes or establish runtime health.
+
+Project Desk owns live tasks, messages and handoffs; GSD files own durable plans
+and source knowledge. Do not create a second live roster or overwrite a peer's
+roadmap. The onboarding files are not merged into every branch automatically.
+Choose the next feature milestone with the owner, deepen its relevant maps, then
+discuss, define its UI contract when applicable, plan, execute and verify.
+
 ## Existing sessions and outages
 
 New MCP tools may require a client restart/reconnect. Save work before restarting.
