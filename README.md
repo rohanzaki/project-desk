@@ -49,6 +49,11 @@ and before ending a turn. No token-consuming autonomous agent loop runs in the
 background. The service persists while agents are idle, but agents must check in
 (or reload their tools) to learn about changes.
 
+Lifecycle check-in hooks for Codex and Claude, enrollment, task discussions and
+the limits of idle notifications are documented in [HOOKS.md](HOOKS.md).
+Use `enable_notifications` with your own actual agent session UUID and existing
+Desk key; this does not grant claims or manufacture read receipts.
+
 ## Claim semantics and practical limits
 
 Directories include descendants. Brackets in Next.js route names are literal.

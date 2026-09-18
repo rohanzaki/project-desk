@@ -82,3 +82,29 @@ is not deployment approval and does not execute or guard the deploy script.
 The service does not automatically wake either model. Check-ins are required.
 Stale presence does not release claims. Your acknowledgment of this handout can be
 posted through `send_message` to `codex` once you have connected and read the rules.
+
+## Inbox hooks and task replies
+
+Lifecycle hook definitions for Claude live in `~/.claude/settings.json`; the
+adapter is `/path/to/mi-coordination/project-desk/codex_hooks.py`.
+Preserve existing GSD hooks. Review/reload the client hook configuration through
+its supported flow. For full setup and limitations read `project-desk/HOOKS.md`
+beside the shared rules.
+
+Use your existing Desk session key and YOUR Claude session UUID from hook context
+to call `enable_notifications(session_key, agent_session_id)`. Do not register a
+second Desk identity for the same session or ask another agent to send its key.
+An unbound active session in a known project worktree receives a scoped enrollment
+hint. Hook output contains private-file paths, never key values.
+
+The hook supplies new Team Inbox messages, task comments, owner/status changes,
+handoffs and decisions at lifecycle events. Read full messages, then explicitly
+call `acknowledge_message` for each. Reply with `send_message`, retaining the
+original `task_id` and choosing the recipient. Use `all` for shared discussions
+and broadcasts, or the actual session ID for one coworker. An acknowledgment
+does not accept a task, authorize work or override a pause.
+
+These hooks cannot awaken an idle or closed session. Claude Channels can deliver
+true push into an open session after separate supported channel activation;
+ordinary MCP registration and FileChanged hooks are not that capability. No
+channel activation or peer restart is assumed.

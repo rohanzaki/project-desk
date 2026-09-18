@@ -17,6 +17,7 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from store import Store, Conflict
+from codex_hooks import bind_credentials, STATE_ROOT
 
 ROOT=Path(__file__).resolve().parent
 INSTRUCTIONS='''Project Desk is the shared coordination system for the owner, Codex and Claude.
@@ -96,6 +97,21 @@ def create_app(db=None, roster=None):
         return store.check_in(session_key,since)
 
     @mcp.tool()
+    def enable_notifications(session_key:str,agent_session_id:str)->dict:
+        """Bind YOUR actual Codex/Claude session UUID to your existing Desk identity.
+        Use the UUID from your hook context or own session; never another agent's.
+        Installs no code and grants no claims. Lifecycle hooks must be installed and
+        activated in the client. Hooks cannot wake an idle/closed chat. No auto receipts."""
+        response=store.check_in(session_key,0)
+        registered=next(s for s in response['board']['sessions'] if s['id']==response['session_id'])
+        def check(tool,args): return store.check_in(args['session_key'],args['since'])
+        path=bind_credentials(agent_session_id,{'session_id':response['session_id'],'session_key':session_key},
+                              registered['project'],STATE_ROOT.parent/registered['kind'],check,registered['kind'])
+        return {'session_id':response['session_id'],'agent_session_id':agent_session_id,
+                'agent':registered['kind'],'private_binding_file':str(path),'status':'bound',
+                'instruction':'Binding is not proof of hook execution. Check /hooks; read and explicitly acknowledge inbox messages.'}
+
+    @mcp.tool()
     def claim_task(session_key:str,title:str,resources:list[str],next_step:str,task_id:str|None=None)->dict:
         """Atomically claim work. Use literal repo-relative paths or service:name; directories include descendants.
         Supply task_id only to claim unowned QUEUED work, using its exact resources. Conflicts prohibit editing."""
@@ -131,9 +147,32 @@ def create_app(db=None, roster=None):
         return store.handoff(session_key,task_id,version,target_session)
 
     @mcp.tool()
+    def prepare_handoff(session_key:str,task_id:str,version:int,target_session:str,
+                        progress:str,remaining_work:str,validation:str,risks:str,
+                        commit_ref:str,branch:str,worktree:str,changed_paths:list[str])->dict:
+        """Persist a complete immutable handoff brief and offer ownership atomically.
+        The current owner keeps the task and claims until the target explicitly accepts.
+        Every context field is required; changed_paths must contain literal repo paths."""
+        return store.prepare_handoff(session_key,task_id,version,target_session,progress,
+                                     remaining_work,validation,risks,commit_ref,branch,
+                                     worktree,changed_paths)
+
+    @mcp.tool()
+    def get_task_context(session_key:str,task_id:str)->dict:
+        """Read authenticated task context, bounded task comments, and handoff briefs.
+        Session metadata is descriptive only; secrets and credential hashes are never returned."""
+        return store.get_task_context(session_key,task_id)
+
+    @mcp.tool()
     def accept_handoff(session_key:str,task_id:str,version:int)->dict:
         """Accept an offered handoff addressed to you, preserving the existing resource claims."""
         return store.handoff(session_key,task_id,version,'',accept=True)
+
+    @mcp.tool()
+    def publish_update(session_key:str,title:str,body:str,commit_ref:str,validation:str,
+                       task_id:str|None=None)->dict:
+        """Publish a validated changelog note and linked broadcast with independent receipts."""
+        return store.publish_update(session_key,title,body,commit_ref,validation,task_id)
 
     @mcp.resource('desk://rules')
     def rules()->str: return INSTRUCTIONS
@@ -144,7 +183,7 @@ def create_app(db=None, roster=None):
     async def index(request): return FileResponse(ROOT/'static/index.html')
     async def health(request):
         with store.connection() as c: c.execute('SELECT 1').fetchone()
-        return JSONResponse({'status':'ok','service':'project-desk','version':'1.0.0'})
+        return JSONResponse({'status':'ok','service':'project-desk','version':'1.1.0'})
     async def snapshot(request):
         return JSONResponse(store.snapshot(request.query_params.get('project','media-intelligence')))
     async def action(request):

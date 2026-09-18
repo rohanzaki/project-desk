@@ -55,6 +55,10 @@ def overlaps(a, b):
 
 
 class Store:
+    CONTEXT_COMMENT_LIMIT = 50
+    CONTEXT_HANDOFF_LIMIT = 20
+    SNAPSHOT_HANDOFF_LIMIT = 100
+
     def __init__(self, path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -87,6 +91,16 @@ class Store:
                 CREATE TABLE IF NOT EXISTS notes (
                     id TEXT PRIMARY KEY, project TEXT NOT NULL, author TEXT NOT NULL,
                     kind TEXT NOT NULL, body TEXT NOT NULL, created TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS handoff_briefs (
+                    id TEXT PRIMARY KEY, project TEXT NOT NULL, task_id TEXT NOT NULL,
+                    source_session TEXT NOT NULL, target_session TEXT NOT NULL,
+                    task_version INTEGER NOT NULL, progress TEXT NOT NULL,
+                    remaining_work TEXT NOT NULL, validation TEXT NOT NULL,
+                    risks TEXT NOT NULL, commit_ref TEXT NOT NULL, branch TEXT NOT NULL,
+                    worktree TEXT NOT NULL, changed_paths TEXT NOT NULL,
+                    brief TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'offered',
+                    created TEXT NOT NULL, accepted TEXT, accepted_by TEXT,
+                    FOREIGN KEY(task_id) REFERENCES tasks(id));
                 CREATE TABLE IF NOT EXISTS events (
                     seq INTEGER PRIMARY KEY AUTOINCREMENT, project TEXT NOT NULL,
                     actor TEXT NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL, created TEXT NOT NULL);
@@ -210,6 +224,8 @@ class Store:
                 c.execute('DELETE FROM claims WHERE task_id=?',(task_id,))
             else:
                 self.claim_resources(c,s['project'],task_id,new_resources)
+            c.execute("UPDATE handoff_briefs SET status='superseded' WHERE task_id=? AND status='offered'",
+                      (task_id,))
             c.execute('''UPDATE tasks SET status=?,next_step=?,summary=?,validation=?,commit_ref=?,deployment=?,
                          resources=?,version=version+1,updated=?,pending_owner=NULL WHERE id=?''',
                       (status,next_step,summary,validation,commit_ref,deployment,json.dumps(new_resources),now(),task_id))
@@ -220,13 +236,24 @@ class Store:
     def handoff(self, key, task_id, version, target_session, accept=False):
         with self.connection(True) as c:
             s = self.auth(c,key); t = self.task(c,task_id)
+            if t['project'] != s['project']:
+                raise PermissionError('Task belongs to another project')
             if t['version'] != version or t['status'] == 'DONE' or t['human_paused']:
                 raise Conflict('Task changed, completed, or paused by the owner')
+            accepted_brief_id = None
             if accept:
                 if t['pending_owner'] != s['id']:
                     raise PermissionError('No handoff addressed to this session')
                 c.execute('UPDATE tasks SET owner=?,pending_owner=NULL,version=version+1,updated=? WHERE id=?',
                           (s['id'],now(),task_id))
+                brief = c.execute('''SELECT id FROM handoff_briefs
+                    WHERE task_id=? AND project=? AND target_session=? AND status='offered'
+                    AND task_version=? ORDER BY created DESC LIMIT 1''',
+                    (task_id,t['project'],s['id'],t['version'] - 1)).fetchone()
+                if brief:
+                    c.execute("UPDATE handoff_briefs SET status='accepted',accepted=?,accepted_by=? WHERE id=?",
+                              (now(),s['id'],brief['id']))
+                    accepted_brief_id = brief['id']
             else:
                 if t['owner'] != s['id']:
                     raise PermissionError('Only the owner can offer a handoff')
@@ -234,11 +261,127 @@ class Store:
                                  (target_session,s['project'])).fetchone()
                 if not target or target_session == s['id']:
                     raise ValueError('Target must be another registered session in this project')
+                c.execute("UPDATE handoff_briefs SET status='superseded' WHERE task_id=? AND status='offered'",
+                          (task_id,))
                 c.execute('UPDATE tasks SET pending_owner=?,version=version+1,updated=? WHERE id=?',
                           (target_session,now(),task_id))
-            self.event(c,t['project'],s['id'],'handoff.accepted' if accept else 'handoff.offered',
-                       {'task_id':task_id,'target':target_session})
+            data = {'task_id':task_id,'target':s['id'] if accept else target_session}
+            if accepted_brief_id:
+                data['handoff_id'] = accepted_brief_id
+            self.event(c,t['project'],s['id'],'handoff.accepted' if accept else 'handoff.offered', data)
             return self.task(c,task_id)
+
+    def prepare_handoff(self, key, task_id, version, target_session, progress,
+                        remaining_work, validation, risks, commit_ref, branch,
+                        worktree, changed_paths):
+        """Persist a complete handoff brief and offer ownership atomically."""
+        progress = text(progress, 'progress')
+        remaining_work = text(remaining_work, 'remaining work')
+        validation = text(validation, 'validation')
+        risks = text(risks, 'risks')
+        commit_ref = text(commit_ref, 'commit ref')
+        branch = text(branch, 'branch', 250)
+        worktree = text(worktree, 'worktree', 1000)
+        if not Path(worktree).is_absolute():
+            raise ValueError('Worktree must be an absolute path')
+        if not isinstance(changed_paths, list) or len(changed_paths) > 100:
+            raise ValueError('changed paths must be a list of 0–100 literal paths')
+        changed_paths = scopes(changed_paths) if changed_paths else []
+        with self.connection(True) as c:
+            s = self.auth(c, key)
+            t = self.task(c, task_id)
+            if t['project'] != s['project']:
+                raise PermissionError('Task belongs to another project')
+            if t['version'] != version:
+                raise Conflict('Task changed; check_in and use its latest version')
+            if t['status'] == 'DONE' or t['human_paused']:
+                raise Conflict('Task is completed or paused by the owner')
+            if t['owner'] != s['id']:
+                raise PermissionError('Only the owner can prepare a handoff')
+            target = c.execute('''SELECT id,name,kind,project,branch,worktree,last_seen,imported
+                FROM sessions WHERE id=? AND project=? AND imported=0''',
+                (target_session, s['project'])).fetchone()
+            if not target or target_session == s['id']:
+                raise ValueError('Target must be another registered session in this project')
+            c.execute("UPDATE handoff_briefs SET status='superseded' WHERE task_id=? AND status='offered'",
+                      (task_id,))
+            brief_id = ident('h-')
+            created = now()
+            brief = (
+                f'Progress: {progress}\nRemaining work: {remaining_work}\n'
+                f'Validation: {validation}\nRisks: {risks}\nCommit: {commit_ref}\n'
+                f'Branch: {branch}\nWorktree: {worktree}\n'
+                f'Changed paths: {", ".join(changed_paths) if changed_paths else "(none)"}'
+            )
+            if len(brief) > 12000:
+                raise ValueError('Handoff brief is too large; shorten its context fields')
+            c.execute('''INSERT INTO handoff_briefs
+                (id,project,task_id,source_session,target_session,task_version,progress,
+                 remaining_work,validation,risks,commit_ref,branch,worktree,changed_paths,
+                 brief,status,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                (brief_id,s['project'],task_id,s['id'],target_session,version,progress,
+                 remaining_work,validation,risks,commit_ref,branch,worktree,
+                 json.dumps(changed_paths),brief,'offered',created))
+            c.execute('''UPDATE tasks SET pending_owner=?,version=version+1,updated=? WHERE id=?''',
+                      (target_session,created,task_id))
+            message_body = f'Handoff offered for {t["title"]} ({task_id})\nHandoff brief: {brief_id}\n\n{brief}'
+            if len(message_body) > 12000:
+                raise ValueError('Handoff notification is too large; shorten its context fields')
+            message = self._message(c,s['project'],s['id'],target_session,message_body,task_id)
+            self.event(c,s['project'],s['id'],'handoff.prepared',{
+                'task_id':task_id, 'handoff_id':brief_id, 'target':target_session,
+                'progress':progress, 'remaining_work':remaining_work,
+                'validation':validation, 'risks':risks, 'commit_ref':commit_ref,
+                'changed_paths':changed_paths})
+            return {'handoff_id':brief_id, 'message_id':message['message_id'],
+                    'status':'offered', 'task':self.task(c,task_id)}
+
+    @staticmethod
+    def _safe_session(row):
+        if not row:
+            return None
+        return {key: row[key] for key in
+                ('id','name','kind','project','branch','worktree','last_seen','imported')}
+
+    def _handoffs(self, c, project, task_id=None, limit=20):
+        if task_id is None:
+            rows = c.execute('''SELECT * FROM handoff_briefs WHERE project=?
+                ORDER BY created DESC LIMIT ?''', (project,limit))
+        else:
+            rows = c.execute('''SELECT * FROM handoff_briefs
+                WHERE project=? AND task_id=? ORDER BY created DESC LIMIT ?''',
+                (project,task_id,limit))
+        handoffs = []
+        for row in rows:
+            item = dict(row)
+            item['changed_paths'] = json.loads(item['changed_paths'])
+            source = c.execute('''SELECT id,name,kind,project,branch,worktree,last_seen,imported
+                FROM sessions WHERE id=? AND project=?''',
+                (item['source_session'],project)).fetchone()
+            target = c.execute('''SELECT id,name,kind,project,branch,worktree,last_seen,imported
+                FROM sessions WHERE id=? AND project=?''',
+                (item['target_session'],project)).fetchone()
+            item['source'] = self._safe_session(source)
+            item['target'] = self._safe_session(target)
+            handoffs.append(item)
+        return handoffs
+
+    def get_task_context(self, key, task_id):
+        with self.connection(True) as c:
+            s = self.auth(c, key)
+            t = self.task(c, task_id)
+            if t['project'] != s['project']:
+                raise PermissionError('Task belongs to another project')
+            comments = [dict(row) for row in c.execute('''SELECT id,project,sender,recipient,
+                body,task_id,created FROM messages WHERE project=? AND task_id=?
+                ORDER BY created DESC LIMIT ?''',
+                (s['project'],task_id,self.CONTEXT_COMMENT_LIMIT))]
+            handoffs = self._handoffs(c, s['project'], task_id, self.CONTEXT_HANDOFF_LIMIT)
+            return {'project':s['project'], 'task':t, 'comments':comments,
+                    'comment_limit':self.CONTEXT_COMMENT_LIMIT,
+                    'handoff_briefs':handoffs,
+                    'handoff_limit':self.CONTEXT_HANDOFF_LIMIT,
+                    'latest_handoff':handoffs[0] if handoffs else None}
 
     def recipient_matches(self, s, recipient):
         return recipient in ('all', s['kind'], s['id'])
@@ -283,6 +426,32 @@ class Store:
         self.event(c,project,author,'note.created',{'note_id':nid,'kind':kind})
         return {'note_id':nid}
 
+    def _publish_update(self, c, project, actor, title, body, commit_ref, validation, task_id=None):
+        title = text(title, 'title', 300)
+        body = text(body, 'body')
+        commit_ref = text(commit_ref, 'commit ref')
+        validation = text(validation, 'validation')
+        if task_id:
+            task = self.task(c, task_id)
+            if task['project'] != project:
+                raise ValueError('Task belongs to another project')
+        formatted = (f'{title}\n\n{body}\n\nCommit: {commit_ref}\n'
+                     f'Validation: {validation}')
+        note = self._note(c, project, actor, formatted, 'changelog')
+        message = self._message(c, project, actor, 'all', formatted, task_id)
+        self.event(c, project, actor, 'changelog.published', {
+            'note_id': note['note_id'], 'message_id': message['message_id'],
+            'title': title, 'commit_ref': commit_ref, 'validation': validation,
+            'task_id': task_id})
+        return {'note_id':note['note_id'], 'message_id':message['message_id'],
+                'status':'published'}
+
+    def publish_update(self, key, title, body, commit_ref, validation, task_id=None):
+        with self.connection(True) as c:
+            s = self.auth(c, key)
+            return self._publish_update(c, s['project'], s['id'], title, body,
+                                        commit_ref, validation, task_id)
+
     def check_in(self,key,since=0):
         if since < 0:
             raise ValueError('Cursor must be nonnegative')
@@ -308,6 +477,7 @@ class Store:
         for m in messages:
             m['acknowledgments']=[dict(r) for r in c.execute('SELECT session_id,acknowledged FROM receipts WHERE message_id=?',(m['id'],))]
         return {'project':project,'sessions':sessions,'tasks':tasks,'messages':messages,
+                'handoff_briefs':self._handoffs(c,project,limit=self.SNAPSHOT_HANDOFF_LIMIT),
                 'notes':[dict(r) for r in c.execute('SELECT * FROM notes WHERE project=? ORDER BY created DESC LIMIT 100',(project,))],
                 'events':[dict(r) for r in c.execute('SELECT * FROM events WHERE project=? ORDER BY seq DESC LIMIT 100',(project,))],
                 'generated_at':now()}
@@ -329,6 +499,9 @@ class Store:
                 return self.task(c,tid)
             if action=='message': return self._message(c,project,'rohan',data['recipient'],data['body'],data.get('task_id'))
             if action=='note': return self._note(c,project,'rohan',data['body'],'decision')
+            if action=='publish_update':
+                return self._publish_update(c,project,'rohan',data['title'],data['body'],
+                                            data['commit_ref'],data['validation'],data.get('task_id'))
             if action=='ack':
                 m=c.execute("SELECT * FROM messages WHERE id=? AND project=? AND recipient IN ('rohan','all')",(data['message_id'],project)).fetchone()
                 if not m: raise ValueError('Message not addressed to the owner')
@@ -341,21 +514,26 @@ class Store:
             if t['status']=='DONE': raise Conflict('Completed task; create follow-up work')
             if action=='pause':
                 c.execute("UPDATE tasks SET status='PAUSED',human_paused=1,pending_owner=NULL WHERE id=?",(t['id'],))
+                c.execute("UPDATE handoff_briefs SET status='paused' WHERE task_id=? AND status='offered'",(t['id'],))
             elif action=='resume':
                 c.execute('UPDATE tasks SET status=?,human_paused=0 WHERE id=?',('RUNNING' if t['owner'] else 'QUEUED',t['id']))
             elif action=='priority':
                 if data['priority'] not in ('normal','high','urgent'): raise ValueError('Invalid priority')
                 c.execute('UPDATE tasks SET priority=? WHERE id=?',(data['priority'],t['id']))
+                c.execute("UPDATE tasks SET pending_owner=NULL WHERE id=?",(t['id'],))
+                c.execute("UPDATE handoff_briefs SET status='superseded' WHERE task_id=? AND status='offered'",(t['id'],))
             elif action=='reassign':
                 target=c.execute('SELECT * FROM sessions WHERE id=? AND project=? AND imported=0',(data['session_id'],project)).fetchone()
                 if not target: raise ValueError('Choose a registered session in this project')
                 text(data.get('reason',''),'handoff reason')
                 self.claim_resources(c,project,t['id'],t['resources'])
+                c.execute("UPDATE handoff_briefs SET status='reassigned' WHERE task_id=? AND status='offered'",(t['id'],))
                 c.execute("UPDATE tasks SET owner=?,imported=0,pending_owner=NULL,status=CASE WHEN status='QUEUED' THEN 'RUNNING' ELSE status END WHERE id=?",(target['id'],t['id']))
             elif action=='close':
                 text(data.get('summary',''),'closure reason')
                 c.execute("UPDATE tasks SET status='DONE',summary=?,validation='Closed by the owner; not a test result',pending_owner=NULL WHERE id=?",(data['summary'],t['id']))
                 c.execute('DELETE FROM claims WHERE task_id=?',(t['id'],))
+                c.execute("UPDATE handoff_briefs SET status='closed' WHERE task_id=? AND status='offered'",(t['id'],))
             else: raise ValueError('Unknown action')
             c.execute('UPDATE tasks SET version=version+1,updated=? WHERE id=?',(now(),t['id']))
             self.event(c,project,'rohan','task.'+action,data)

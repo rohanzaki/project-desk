@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Project Desk · the owner, Codex & Claude</title><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script></head>
 <body>
-<header><div><h1>Project Desk<span class="dot">.</span></h1><p>the owner, Codex & Claude</p></div><div class="connection"><span id="connection">Connecting…</span><button id="refresh">Refresh</button></div></header>
+<header><div><h1>Project Desk<span class="dot">.</span></h1><p>the owner, Codex & Claude</p></div><div class="connection"><span id="connection">Connecting…</span><div class="notification-wrap"><button id="notifications" type="button" aria-label="Notifications" aria-controls="notification-panel" aria-expanded="false"><svg class="notification-bell" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/></svg>Updates <span id="notification-count" hidden></span></button><div id="notification-panel" class="notification-panel" role="dialog" aria-label="Recent updates" hidden><div class="notification-head"><strong>Recent updates</strong><button id="mark-seen" type="button">Mark seen</button></div><p id="notification-limit" class="notification-limit" hidden>Only the latest 100 activity events are available in this view.</p><div id="notification-list"></div></div></div><button id="refresh">Refresh</button></div></header>
 <main>
 <div class="intro"><div><h2>One project. A shared view.</h2><p>Ownership, handoffs, and the decisions that keep work moving.</p></div><label>Project<input id="project" value="media-intelligence" spellcheck="false"></label></div>
 <div id="notice" role="status" aria-live="polite"></div>
@@ -9,7 +9,7 @@
 <div class="filters"><label>Status<select id="status-filter"><option value="active">Active work</option><option value="all">All work</option><option>QUEUED</option><option>RUNNING</option><option>BLOCKED</option><option>PAUSED</option><option>DONE</option></select></label><label>Find a task<input id="search" type="search" placeholder="Title, owner, or path"></label></div>
 <div id="tasks" class="task-list"></div><section class="sessions"><h2>Who's here</h2><p class="hint">Check-ins older than 15 minutes are stale. Their claims stay reserved.</p><div id="sessions"></div></section>
 </section>
-<aside><section class="inbox"><div class="section-head"><h2>Team inbox</h2><button id="new-message">Write message</button></div><div id="messages"></div></section><section class="notebook"><div class="section-head"><h2>Decisions & notes</h2><button id="new-note">Add decision</button></div><div id="notes"></div></section></aside></div>
+<aside><section class="inbox"><div class="section-head"><div><h2>Team inbox</h2><p class="hint">Showing the latest 200 messages.</p></div><button id="new-message">Write message</button></div><div id="messages"></div></section><section class="notebook"><div class="section-head"><h2>Decisions & notes</h2><div class="section-actions"><button id="publish-update" class="primary">Publish update</button><button id="new-note">Add decision</button></div></div><div id="notes"></div></section></aside></div>
 <details class="activity"><summary>Activity history</summary><div id="events"></div></details>
 </main>
 <footer>Shared local workspace · All times shown in PKT · A message receipt confirms reading, not approval.</footer>

@@ -1,5 +1,43 @@
 # Project Desk verification — 2026-09-18
 
+## Notification and handoff release (1.1.0)
+
+- Final full suite: **59 passed**, with the two dependency deprecation warnings
+  described below. JavaScript syntax and `git diff --check` passed. Desktop and
+  mobile screenshots inspected; bell foreground contrast corrected and unread
+  state verified to survive reload until explicitly marked seen.
+- Extended automated suite covers private Codex/Claude session bindings, native
+  hook configuration preservation, reassignments, bounded event delivery,
+  independent broadcast receipts, outage retries, concurrent deduplication,
+  Stop-loop prevention and human pauses.
+- Structured handoff checks cover immutable context, retained ownership until
+  acceptance, project isolation, stale/superseded offers, human reassignment,
+  pause/closure, and transaction rollback for oversized notifications.
+- Isolated Playwright checks cover comments and replies retaining task context,
+  explicit receiving-session selection, changelog broadcasts, bell updates and
+  browser-local seen state separate from message read receipts.
+- The standalone two-client MCP/browser regression passed: conflict refusal,
+  explicit acknowledgments, ownership transfer, task completion, dashboard
+  actions and mobile layout. All test clients use temporary databases.
+- Native VS Code Codex app-server discovery reports all five Project Desk hook
+  definitions enabled and trusted, with no discovery warnings/errors. Existing
+  GSD SessionStart was retained. Claude settings retain unrelated handlers.
+
+Activation boundary: installation, trust and private enrollment do not prove an
+already-open IDE process executed a hook. Actual peer acknowledgment remains
+separate evidence. Lifecycle hooks run during matching client events; they do
+not wake idle/closed conversations. Existing clients may require reload after
+saving work. No peer process was restarted and no production PM2/app operation
+was performed by this release.
+
+The dashboard polls every three seconds while visible and no edit dialog is
+open. Its recent view is bounded to 100 events, 200 messages and 100 handoff
+briefs; older durable records remain in SQLite. Task-context reads return at
+most 50 comments and 20 briefs. The bell is a browser-local seen marker, never
+another agent's acknowledgment or permission to take its task.
+
+## Original installation baseline
+
 - 25 unit/integration tests passed. Covers eight concurrent claims, parent/child
   paths, project boundaries, global service claims, optimistic versions, owner
   enforcement, pause preservation, restart persistence, acknowledgment identity,
