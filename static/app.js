@@ -4,6 +4,7 @@ const $=selector=>document.querySelector(selector);
 const $$=selector=>[...document.querySelectorAll(selector)];
 let board=null,submitting=false,dialogAction=null,notificationProject='',notificationCursor=0;
 let pinnedTasks=new Set();
+const taskDetailState=new Map();
 const ui={taskPage:1,messagePage:1,notePage:1,sessionPage:1,eventPage:1,rail:'inbox'};
 const LIST_SIZES={messagePage:8,notePage:6,sessionPage:8,eventPage:12};
 
@@ -256,12 +257,17 @@ function filteredTasks(){
 }
 
 function renderTasks(){
+  $$('#tasks .task').forEach(article=>{
+    const details=article.querySelector('.task-body');
+    if(details)taskDetailState.set(article.dataset.task,details.open);
+  });
   const tasks=filteredTasks(),pinned=tasks.filter(task=>pinnedTasks.has(task.id)),regular=tasks.filter(task=>!pinnedTasks.has(task.id));
   const page=paginate(regular,'taskPage',Number($('#task-page-size').value)||10);
   const autoExpand=tasks.length<=3;
   $('#count').textContent=tasks.length;
-  const pinnedHtml=pinned.length?`<div class="task-group-label"><span>Pinned</span><strong>${pinned.length}</strong></div>${pinned.map(task=>taskCard(task,autoExpand)).join('')}`:'';
-  const regularHtml=page.items.length?`<div class="task-group-label"><span>${pinned.length?'All other tasks':'Tasks'}</span><strong>${regular.length}</strong></div>${page.items.map(task=>taskCard(task,autoExpand)).join('')}`:'';
+  const expanded=task=>taskDetailState.has(task.id)?taskDetailState.get(task.id):autoExpand;
+  const pinnedHtml=pinned.length?`<div class="task-group-label"><span>Pinned</span><strong>${pinned.length}</strong></div>${pinned.map(task=>taskCard(task,expanded(task))).join('')}`:'';
+  const regularHtml=page.items.length?`<div class="task-group-label"><span>${pinned.length?'All other tasks':'Tasks'}</span><strong>${regular.length}</strong></div>${page.items.map(task=>taskCard(task,expanded(task))).join('')}`:'';
   $('#tasks').innerHTML=pinnedHtml+regularHtml||(tasks.length?'<p class="empty">Every matching task is pinned above.</p>':'<p class="empty">No tasks match this view. Clear a filter or add a task.</p>');
   $('#task-pagination').innerHTML=pageButtons('taskPage',page);
 }
@@ -367,6 +373,12 @@ $('#tasks').addEventListener('click',event=>{
   else openEditor(action==='pause'?'Pause this task':'Resume this task',`<p>${esc(task.title)}</p><p>${action==='pause'?'Claims stay reserved. The agent must check in to see your pause.':'This releases your pause instruction; it does not start an agent automatically.'}</p>`,()=>mutate(action,base));
 });
 
+$('#tasks').addEventListener('toggle',event=>{
+  if(!event.target.matches('.task-body'))return;
+  const article=event.target.closest('[data-task]');
+  if(article)taskDetailState.set(article.dataset.task,event.target.open);
+},true);
+
 $('#messages').addEventListener('click',async event=>{
   const reply=event.target.closest('[data-reply]');
   if(reply){const message=board.messages.find(item=>item.id===reply.dataset.reply);composeMessage(message?.task_id||'',message?.sender||'all',message?.id||'');return;}
@@ -418,7 +430,7 @@ $('#mark-seen').onclick=()=>{
 
 function resetTaskPage(){ui.taskPage=1;if(board){renderMetrics();renderTasks();}}
 $('#refresh').onclick=refresh;
-$('#project').addEventListener('change',()=>{Object.assign(ui,{taskPage:1,messagePage:1,notePage:1,sessionPage:1,eventPage:1});notificationProject='';refresh();});
+$('#project').addEventListener('change',()=>{Object.assign(ui,{taskPage:1,messagePage:1,notePage:1,sessionPage:1,eventPage:1});taskDetailState.clear();notificationProject='';refresh();});
 $('#status-filter').onchange=resetTaskPage;
 $('#owner-filter').onchange=resetTaskPage;
 $('#priority-filter').onchange=resetTaskPage;

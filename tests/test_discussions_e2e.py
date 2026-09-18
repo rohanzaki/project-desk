@@ -276,3 +276,34 @@ def test_notification_bell_tracks_external_updates_without_receipts(isolated_ser
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
         page.screenshot(path="/tmp/project-desk-dashboard-mobile.png", full_page=True)
         browser.close()
+
+
+def test_task_details_stay_open_across_live_refreshes(isolated_service):
+    service = isolated_service
+    for number in range(4):
+        service["desk"].human("media-intelligence", "create", {
+            "title": f"Refresh fixture {number}",
+            "resources": [f"src/refresh-{number}"],
+            "next_step": "Keep the task list large enough for compact rows",
+        })
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        page.goto(service["base"])
+        page.wait_for_load_state("networkidle")
+
+        task_card = page.locator("article.task").filter(has_text="Capture review")
+        details = task_card.locator("details.task-body")
+        assert details.evaluate("node => node.open") is False
+
+        details.locator("summary").click()
+        assert details.evaluate("node => node.open") is True
+        page.wait_for_timeout(6500)
+        assert details.evaluate("node => node.open") is True
+
+        details.locator("summary").click()
+        assert details.evaluate("node => node.open") is False
+        page.wait_for_timeout(3500)
+        assert details.evaluate("node => node.open") is False
+        browser.close()
