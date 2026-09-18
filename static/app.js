@@ -10,6 +10,19 @@ const taskFor=id=>board?.tasks.find(t=>t.id===id);
 const sessionFor=id=>board?.sessions.find(s=>s.id===id);
 const shortId=id=>id?String(id).slice(-8):'';
 const name=id=>id==='rohan'?'the owner':sessionFor(id)?.name||id||'Unassigned';
+const agentKind=id=>{
+ if(id==='rohan')return 'rohan';
+ if(id==='all')return 'all';
+ if(id==='codex'||id==='claude')return id;
+ const s=sessionFor(id);
+ return s?.kind||'unknown';
+};
+const initials=id=>{
+ const label=id==='all'?'All':name(id);
+ return label.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]).join('').toUpperCase()||'?';
+};
+const agentTitle=id=>({rohan:'the owner',codex:'Codex',claude:'Claude',all:'Everyone',unknown:'Unknown'}[agentKind(id)]||name(id));
+const agentChip=(id,extra='')=>`<span class="agent-chip agent-${esc(agentKind(id))} ${extra}"><span class="agent-avatar">${esc(initials(id))}</span><span>${esc(agentTitle(id))}</span></span>`;
 const sessionLabel=id=>{
  const s=sessionFor(id);
  return s?`${s.name} · ${s.branch} · ${shortId(s.id)}${s.imported?' · imported':''}`:name(id);
@@ -28,6 +41,14 @@ function notificationText(e){
  const task=taskFor(data.task_id), message=board.messages.find(m=>m.id===data.message_id);
  const subject=task?` · ${task.title}`:message?` · ${message.body.slice(0,90)}${message.body.length>90?'…':''}`:'';
  return `${name(e.actor)} · ${e.kind.replaceAll('.',' ')}${subject}`;
+}
+function notificationKind(e){
+ if(e.kind.startsWith('handoff.'))return 'handoff';
+ if(e.kind==='message.sent')return 'message';
+ if(e.kind==='changelog.published')return 'changelog';
+ if(e.kind==='note.created')return 'note';
+ if(e.kind.startsWith('task.'))return 'task';
+ return 'event';
 }
 function syncNotificationCursor(){
  const current=project();
@@ -49,7 +70,7 @@ function renderNotifications(){
  count.textContent=events.length>99?'99+':String(events.length);
  count.hidden=!events.length;
  $('#notification-limit').hidden=!truncated;
- $('#notification-list').innerHTML=events.length?events.map(e=>`<div class="notification-item" data-notification-seq="${esc(e.seq)}"><span>${time(e.created)}</span><p>${esc(notificationText(e))}</p></div>`).join(''):'<p class="notification-empty">No new updates.</p>';
+ $('#notification-list').innerHTML=events.length?events.map(e=>`<div class="notification-item notification-${esc(notificationKind(e))}" data-notification-seq="${esc(e.seq)}"><div class="notification-item-top"><span class="event-type">${esc(notificationKind(e))}</span><span>${time(e.created)}</span></div><p>${esc(notificationText(e))}</p></div>`).join(''):'<p class="notification-empty">No new updates.</p>';
 }
 
 function recipientOptions(value='all',include=''){
@@ -106,14 +127,15 @@ async function mutate(action,data){
 function messageReceipt(m){
  const readers=m.acknowledgments||[];
  return readers.length
-  ? `<div class="receipt read"><span class="receipt-state">Read</span> by ${readers.map(a=>esc(name(a.session_id))).join(', ')}</div>`
+  ? `<div class="receipt read"><span class="receipt-state">Read</span> by ${readers.map(a=>agentChip(a.session_id,'agent-mini')).join(' ')}</div>`
   : '<div class="receipt sent"><span class="receipt-state">Sent</span> · Awaiting read</div>';
 }
 
 function messageCard(m,compact=false){
  const task=taskFor(m.task_id);
- return `<article class="message${compact?' message-compact':''}" data-message="${esc(m.id)}">
-  <div class="meta"><strong>${esc(name(m.sender))}</strong> <span class="message-direction">to ${esc(recipientLabel(m.recipient))}</span> · ${time(m.created)}</div>
+ return `<article class="message message-from-${esc(agentKind(m.sender))} message-to-${esc(agentKind(m.recipient))}${compact?' message-compact':''}" data-message="${esc(m.id)}">
+  <div class="message-route"><div>${agentChip(m.sender)}<span class="route-arrow">to</span>${agentChip(m.recipient,'agent-recipient')}</div><time>${time(m.created)}</time></div>
+  <div class="meta message-direction">${esc(name(m.sender))} to ${esc(recipientLabel(m.recipient))}</div>
   ${task?`<div class="message-task">Task: <strong>${esc(task.title)}</strong> <span>${esc(shortId(task.id))}</span></div>`:''}
   <p>${esc(m.body)}</p>
   ${messageReceipt(m)}
@@ -149,8 +171,8 @@ function render(){
  const filter=$('#status-filter').value, q=$('#search').value.toLowerCase();
  const tasks=board.tasks.filter(t=>(filter==='all'||(filter==='active'?t.status!=='DONE':t.status===filter))&&JSON.stringify([t.title,name(t.owner),t.resources]).toLowerCase().includes(q));
  $('#count').textContent=tasks.length;
- $('#tasks').innerHTML=tasks.length?tasks.map(t=>`<article class="task" data-task="${esc(t.id)}">
-  <div class="task-top"><div><h3>${esc(t.title)}</h3><div class="meta">${esc(name(t.owner)||t.assigned_to)} ${!t.owner&&t.assigned_to?'· Assigned to '+esc(t.assigned_to):''} · ${time(t.updated)}</div></div><div><span class="badge ${t.status.toLowerCase()}">${t.status}</span>${t.priority!=='normal'?`<span class="priority">${esc(t.priority)}</span>`:''}</div></div>
+ $('#tasks').innerHTML=tasks.length?tasks.map(t=>`<article class="task task-${esc(t.status.toLowerCase())}" data-task="${esc(t.id)}">
+  <div class="task-top"><div><h3>${esc(t.title)}</h3><div class="task-owner">${agentChip(t.owner||t.assigned_to||'all')}<strong class="owner-name">${esc(name(t.owner)||t.assigned_to||'Unassigned')}</strong><span class="meta">${!t.owner&&t.assigned_to?'Assigned to '+esc(t.assigned_to):'Owner'} · ${time(t.updated)}</span></div></div><div class="task-flags"><span class="badge ${t.status.toLowerCase()}">${t.status}</span>${t.priority!=='normal'?`<span class="priority">${esc(t.priority)}</span>`:''}</div></div>
   ${t.imported?`<div class="imported">${t.status==='DONE'?'Imported completion report':'Imported report — ownership needs confirmation'}</div>`:''}
   ${t.pending_owner?`<div class="imported">Handoff offered to ${esc(name(t.pending_owner))}; awaiting acceptance</div>`:''}
   <p class="scope">${t.resources.map(esc).join(' / ')}</p><p class="next">${esc(t.status==='DONE'?t.summary:t.next_step)}</p>
@@ -159,7 +181,7 @@ function render(){
   ${discussion(t)}
   ${t.status!=='DONE'?`<div class="actions"><button data-action="${t.human_paused?'resume':'pause'}">${t.human_paused?'Resume':'Pause'}</button><button data-action="priority">Set priority</button><button data-action="reassign">Reassign</button><button data-action="close">Close with note</button></div>`:''}
  </article>`).join(''):'<p class="empty">No tasks in this view. Add a task or change the filter.</p>';
- $('#sessions').innerHTML=board.sessions.length?board.sessions.map(s=>`<div class="session"><span class="presence ${s.stale||s.imported?'stale':''}"></span><div><strong>${esc(s.name)}</strong> <span class="meta">${esc(s.kind)} · ${s.imported?'Imported, unconfirmed':s.stale?'Stale':'Checked in recently'}</span><div class="meta">${esc(s.branch)} · ${shortId(s.id)} · ${time(s.last_seen)}</div></div></div>`).join(''):'<p class="empty">Agents appear here after registering.</p>';
+ $('#sessions').innerHTML=board.sessions.length?board.sessions.map(s=>`<div class="session session-${esc(s.kind)}"><span class="presence ${s.stale||s.imported?'stale':''}"></span><div><strong>${esc(s.name)}</strong> ${agentChip(s.id,'agent-mini')} <span class="meta">${esc(s.imported?'Imported, unconfirmed':s.stale?'Stale':'Checked in recently')}</span><div class="meta">${esc(s.branch)} · ${shortId(s.id)} · ${time(s.last_seen)}</div></div></div>`).join(''):'<p class="empty">Agents appear here after registering.</p>';
  $('#messages').innerHTML=board.messages.length?board.messages.map(m=>messageCard(m)).join(''):'<p class="empty">No messages yet. Send a request or leave a handoff for the team.</p>';
  $('#notes').innerHTML=board.notes.length?board.notes.map(n=>`<div class="note"><div class="meta">${esc(n.kind)} · ${esc(name(n.author))} · ${time(n.created)}</div><p>${esc(n.body)}</p></div>`).join(''):'<p class="empty">Record a decision so every session has the same context.</p>';
  $('#events').innerHTML=board.events.map(e=>`<div class="event">${time(e.created)} · ${esc(name(e.actor))} · ${esc(e.kind)}<details><summary>Details</summary>${esc(JSON.stringify(e.data))}</details></div>`).join('');
