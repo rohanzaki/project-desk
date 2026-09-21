@@ -59,6 +59,21 @@ class Store:
     CONTEXT_HANDOFF_LIMIT = 20
     SNAPSHOT_HANDOFF_LIMIT = 100
 
+    # Sections check_in can return. The default (include=None) is the whole
+    # dashboard snapshot, which is what the web UI and the lifecycle hooks read
+    # — but it is far too much for an agent that only wants to know what is
+    # new. On a busy project it reached ~695KB and overran the caller's context
+    # twice in one night, so the message the agent needed could not be read at
+    # all. An agent should ask for sections instead: ['inbox','conflicts'].
+    SECTIONS = ('events', 'inbox', 'board', 'my_tasks', 'counts')
+    # What a caller that passes no `include` has always received.
+    LEGACY_SECTIONS = ('events', 'inbox', 'board')
+    # Long prose fields are kept whole in the inbox (the body IS the point) but
+    # shortened in task LISTS, where forty full summaries are what blows the
+    # budget. Ask for one task by id when the whole text is wanted.
+    DIGEST_CHARS = 240
+    DIGEST_FIELDS = ('summary', 'validation', 'next_step')
+
     def __init__(self, path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -452,21 +467,114 @@ class Store:
             return self._publish_update(c, s['project'], s['id'], title, body,
                                         commit_ref, validation, task_id)
 
-    def check_in(self,key,since=0):
+    def would_conflict(self, key, resources):
+        """Who already holds these paths — WITHOUT claiming them.
+
+        claim() already refuses an overlap, so two tasks can never hold
+        overlapping resources; that is why check_in has no 'conflicts' section,
+        it would be empty by construction. What is genuinely missing is the
+        question you want answered BEFORE you plan around a file: is anyone on
+        it? Asking by claiming creates a task you may not want and must then
+        release. This is read-only and creates nothing.
+        """
+        if isinstance(resources, str):
+            resources = [resources]
+        if not resources:
+            raise ValueError('Name at least one resource to check')
+        with self.connection() as c:
+            s = self.auth(c, key)
+            blockers = []
+            for existing in c.execute(
+                    "SELECT * FROM claims WHERE (project=? OR resource LIKE 'service:%')", (s['project'],)):
+                hits = [r for r in resources if overlaps(r, existing['resource'])]
+                if not hits:
+                    continue
+                task = self.task(c, existing['task_id'])
+                if task['owner'] == s['id']:
+                    continue  # already mine; claiming again is not a conflict
+                blockers.append({'resource': existing['resource'], 'your_resources': hits,
+                                 'task_id': task['id'], 'title': task['title'],
+                                 'owner': task['owner'], 'status': task['status'],
+                                 'human_paused': task['human_paused']})
+            return {'resources': resources, 'clear': not blockers, 'blockers': blockers}
+
+    def _digest(self, row):
+        """Shorten a task's long prose, leaving proof of what was cut.
+
+        A summary or validation can legitimately run to several thousand
+        characters. That is right when you open one task and ruinous in a list
+        of forty. The full text stays available through get_task_context.
+        """
+        out = dict(row)
+        for field in self.DIGEST_FIELDS:
+            value = out.get(field)
+            if isinstance(value, str) and len(value) > self.DIGEST_CHARS:
+                out[field] = value[:self.DIGEST_CHARS].rstrip() + '…'
+                out[f'{field}_chars'] = len(value)
+                out['digested'] = True
+        return out
+
+    def check_in(self,key,since=0,include=None):
+        """Refresh presence and report what changed.
+
+        include=None keeps the historic response exactly: events, inbox and the
+        full board snapshot. Live sessions and the hooks read response['board']
+        directly, so that default must not change under them.
+
+        Passing include returns only those sections, which is how an agent
+        avoids being handed the entire dashboard on every turn.
+        """
         if since < 0:
             raise ValueError('Cursor must be nonnegative')
+        if include is not None:
+            if isinstance(include, str):
+                include = [include]
+            unknown = sorted({s for s in include if s not in self.SECTIONS})
+            if unknown:
+                raise ValueError(f"Unknown section(s): {', '.join(unknown)}. "
+                                 f"Valid sections: {', '.join(self.SECTIONS)}")
+        # No include -> the historic three sections ONLY. The newer sections
+        # must be asked for by name, or the default response would quietly grow
+        # and every existing caller would pay for sections it never reads.
+        wants = (lambda section: section in self.LEGACY_SECTIONS) if include is None \
+                else (lambda section: section in include)
         with self.connection(True) as c:
             s=self.auth(c,key)
-            events=[dict(r) for r in c.execute('SELECT * FROM events WHERE project=? AND seq>? ORDER BY seq LIMIT 100',
-                                              (s['project'],since))]
-            for e in events: e['data']=json.loads(e['data'])
-            inbox=[dict(r) for r in c.execute('''SELECT m.* FROM messages m WHERE project=?
-                AND recipient IN ('all',?,?) AND sender!=? AND NOT EXISTS
-                (SELECT 1 FROM receipts r WHERE r.message_id=m.id AND r.session_id=?) ORDER BY created LIMIT 100''',
-                (s['project'],s['kind'],s['id'],s['id'],s['id']))]
-            # Cursor advances only over events actually returned.
-            return {'session_id':s['id'],'cursor':events[-1]['seq'] if events else since,
-                    'events':events,'inbox':inbox, 'board':self._snapshot(c,s['project'])}
+            events=[]
+            if wants('events'):
+                events=[dict(r) for r in c.execute('SELECT * FROM events WHERE project=? AND seq>? ORDER BY seq LIMIT 100',
+                                                  (s['project'],since))]
+                for e in events: e['data']=json.loads(e['data'])
+            # Cursor advances only over events actually returned — so a caller
+            # that did not ask for events keeps its place rather than skipping.
+            out={'session_id':s['id'],'cursor':events[-1]['seq'] if events else since}
+            if wants('events'):
+                out['events']=events
+            if wants('inbox'):
+                # Bodies stay whole here: an unread message you cannot read is
+                # the bug this whole parameter exists to fix.
+                out['inbox']=[dict(r) for r in c.execute('''SELECT m.* FROM messages m WHERE project=?
+                    AND recipient IN ('all',?,?) AND sender!=? AND NOT EXISTS
+                    (SELECT 1 FROM receipts r WHERE r.message_id=m.id AND r.session_id=?) ORDER BY created LIMIT 100''',
+                    (s['project'],s['kind'],s['id'],s['id'],s['id']))]
+            mine=None
+            if wants('my_tasks') or wants('counts'):
+                mine=[self.task(c,r['id']) for r in c.execute(
+                    'SELECT id FROM tasks WHERE project=? AND owner=? ORDER BY updated DESC',(s['project'],s['id']))]
+            if wants('my_tasks'):
+                out['my_tasks']=[self._digest(t) for t in mine]
+            if wants('counts'):
+                unread=c.execute('''SELECT COUNT(*) FROM messages m WHERE project=?
+                    AND recipient IN ('all',?,?) AND sender!=? AND NOT EXISTS
+                    (SELECT 1 FROM receipts r WHERE r.message_id=m.id AND r.session_id=?)''',
+                    (s['project'],s['kind'],s['id'],s['id'],s['id'])).fetchone()[0]
+                out['counts']={'unread_messages':unread,'my_tasks':len(mine),
+                               'my_open_tasks':sum(1 for t in mine if t['status'] not in ('DONE','CANCELLED')),
+                               'project_tasks':c.execute('SELECT COUNT(*) FROM tasks WHERE project=?',(s['project'],)).fetchone()[0],
+                               'sessions':c.execute('SELECT COUNT(*) FROM sessions WHERE project=?',(s['project'],)).fetchone()[0]}
+            if wants('board'):
+                out['board']=self._snapshot(c,s['project'])
+            return out
 
     def _snapshot(self,c,project):
         sessions=[dict(r) for r in c.execute('SELECT id,name,kind,project,branch,worktree,last_seen,imported FROM sessions WHERE project=?',(project,))]
