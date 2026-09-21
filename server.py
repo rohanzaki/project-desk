@@ -92,9 +92,20 @@ def create_app(db=None, roster=None):
         return store.register(name,agent,project,branch,worktree)
 
     @mcp.tool()
-    def check_in(session_key:str,since:int=0)->dict:
-        """Refresh presence, read task claims, pending inbox and events since cursor. Does NOT acknowledge messages."""
-        return store.check_in(session_key,since)
+    def check_in(session_key:str,since:int=0,include:list[str]|None=None)->dict:
+        """Refresh presence, read task claims, pending inbox and events since cursor. Does NOT acknowledge messages.
+
+        include picks what comes back. Omit it and you get the whole dashboard
+        snapshot, which on a busy project runs to hundreds of KB and can overrun
+        your own context — ask for sections instead:
+          inbox     unread messages addressed to you, bodies intact
+          conflicts only the other-owned tasks overlapping something YOU hold
+          my_tasks  your tasks, long prose shortened (full text: get_task_context)
+          counts    unread/task/session totals only
+          events    the event log since your cursor
+          board     the full snapshot (what the dashboard and the hooks read)
+        A typical agent turn wants include=["inbox","conflicts","counts"]."""
+        return store.check_in(session_key,since,include)
 
     @mcp.tool()
     def enable_notifications(session_key:str,agent_session_id:str)->dict:
@@ -110,6 +121,16 @@ def create_app(db=None, roster=None):
         return {'session_id':response['session_id'],'agent_session_id':agent_session_id,
                 'agent':registered['kind'],'private_binding_file':str(path),'status':'bound',
                 'instruction':'Binding is not proof of hook execution. Check /hooks; read and explicitly acknowledge inbox messages.'}
+
+    @mcp.tool()
+    def would_conflict(session_key:str,resources:list[str])->dict:
+        """Check who already holds these paths, WITHOUT claiming them or creating a task.
+
+        Use before you plan around a file. claim_task already refuses an overlap,
+        but asking that way creates a task you then have to release. Returns
+        clear=true when nothing holds them, else the blocking task, its owner and
+        which of your paths it covers. Read-only; changes nothing."""
+        return store.would_conflict(session_key,resources)
 
     @mcp.tool()
     def claim_task(session_key:str,title:str,resources:list[str],next_step:str,task_id:str|None=None)->dict:
