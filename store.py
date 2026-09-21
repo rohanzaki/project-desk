@@ -418,15 +418,45 @@ class Store:
         self.event(c,project,sender,'message.sent',{'message_id':mid,'recipient':recipient})
         return {'message_id':mid,'status':'sent','acknowledged':False}
 
-    def acknowledge(self,key,message_id):
+    def _acknowledge(self,c,s,message_id):
+        m=c.execute('SELECT * FROM messages WHERE id=?',(message_id,)).fetchone()
+        if not m or m['project'] != s['project'] or not self.recipient_matches(s,m['recipient']):
+            raise PermissionError('This message is not addressed to your session')
+        c.execute('INSERT OR IGNORE INTO receipts VALUES(?,?,?)',(message_id,s['id'],now()))
+        self.event(c,s['project'],s['id'],'message.acknowledged',{'message_id':message_id})
+        return {'message_id':message_id,'acknowledged_by':s['id']}
+
+    def acknowledge(self,key,message_id=None,message_ids=None):
+        """Mark one message read, or many in one call.
+
+        Registering into a busy project delivers the whole unread backlog at
+        once — 40 messages on this project in one night — and acknowledging
+        them singly is 40 round trips. A list does it in one.
+
+        A batch reports per-message outcomes instead of aborting on the first
+        id that is not yours: losing 39 good acknowledgements to one bad id is
+        exactly how a backlog never clears. A single message_id keeps the old
+        return shape AND the old exception, because callers depend on both.
+        """
+        if message_id is None and message_ids is None:
+            raise ValueError('Provide message_id (one) or message_ids (several)')
         with self.connection(True) as c:
             s=self.auth(c,key)
-            m=c.execute('SELECT * FROM messages WHERE id=?',(message_id,)).fetchone()
-            if not m or m['project'] != s['project'] or not self.recipient_matches(s,m['recipient']):
-                raise PermissionError('This message is not addressed to your session')
-            c.execute('INSERT OR IGNORE INTO receipts VALUES(?,?,?)',(message_id,s['id'],now()))
-            self.event(c,s['project'],s['id'],'message.acknowledged',{'message_id':message_id})
-            return {'message_id':message_id,'acknowledged_by':s['id']}
+            if message_ids is None:
+                return self._acknowledge(c,s,message_id)
+            if isinstance(message_ids,str):
+                message_ids=[message_ids]
+            ids=list(dict.fromkeys(([message_id] if message_id else [])+list(message_ids)))
+            if not ids:
+                raise ValueError('message_ids was empty — name at least one message')
+            acknowledged,failed=[],[]
+            for mid in ids:
+                try:
+                    self._acknowledge(c,s,mid); acknowledged.append(mid)
+                except PermissionError as e:
+                    failed.append({'message_id':mid,'reason':str(e)})
+            return {'acknowledged':acknowledged,'failed':failed,'acknowledged_by':s['id'],
+                    'counts':{'acknowledged':len(acknowledged),'failed':len(failed)}}
 
     def note(self,key,body,kind='note'):
         if kind not in ('note','proposal','finding'):

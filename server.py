@@ -153,9 +153,14 @@ def create_app(db=None, roster=None):
         return store.message(session_key,recipient,body,task_id)
 
     @mcp.tool()
-    def acknowledge_message(session_key:str,message_id:str)->dict:
-        """Explicitly acknowledge an inbox message after reading it. Does not approve its request or change task ownership."""
-        return store.acknowledge(session_key,message_id)
+    def acknowledge_message(session_key:str,message_id:str|None=None,message_ids:list[str]|None=None)->dict:
+        """Explicitly acknowledge inbox message(s) after reading. Does not approve any request or change task ownership.
+
+        Pass message_ids to clear a backlog in ONE call — registering into a busy
+        project can deliver dozens at once. A batch reports per-message outcomes
+        rather than aborting on the first id that is not yours, so one bad id
+        cannot cost you the rest. A single message_id behaves exactly as before."""
+        return store.acknowledge(session_key,message_id,message_ids)
 
     @mcp.tool()
     def leave_note(session_key:str,body:str,kind:str='note')->dict:
