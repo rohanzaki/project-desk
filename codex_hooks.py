@@ -16,6 +16,7 @@ import time
 import urllib.request
 from pathlib import Path
 
+
 ROOT = Path(__file__).resolve().parent
 STATE_ROOT = Path.home() / '.local/state/project-desk/codex'
 # Quoted verbatim to agents, so they have to be right for THIS installation.
@@ -69,8 +70,25 @@ def compact(value, limit=360):
     return re.sub(r'[\x00-\x1f\x7f]', ' ', str(value))[:limit]
 
 
-def collect(state, response, initial=False):
-    """Produce bounded context and advance delivery state, never server receipts."""
+def collect(state, response, initial=False, full=False):
+    """Turn a check_in response into the lines injected into an agent's context.
+
+    `full` is the difference between "orient me, I just started" and "tell me
+    what changed". Without it every user prompt re-injected every non-DONE task
+    in the project — fifteen of them here, truncated mid-sentence, on every
+    single turn. That is expensive and it buries the one line that mattered.
+
+    After a session start, another agent's task earns a line only when it is
+    news — it changed since this session last looked. A static list of claims
+    the agent already knows about is noise it cannot act on.
+
+    There is deliberately no "conflicts with yours" line. claim_task refuses any
+    overlap, so two tasks can never hold overlapping paths; such a line could
+    only ever be empty, and an agent reading its absence would believe it had
+    checked something. Ask would_conflict before planning around a file.
+
+    Produces bounded context and advances delivery state, never server receipts.
+    """
     me = state['session_id']
     board = response['board']
     if response['session_id'] != me or board['project'] != state['project']:
@@ -93,7 +111,8 @@ def collect(state, response, initial=False):
         changed = current[tid] != prior.get(tid)
         if tid in self_updates and tid not in incoming_updates and not initial:
             changed = False  # Our own status writes must not cause a Stop loop.
-        if (changed or initial) and (mine or active or tid in prior or tid in incoming_updates):
+        if (changed or initial) and (mine or (full and active)
+                                     or tid in prior or tid in incoming_updates):
             prefix = 'YOUR TASK' if mine else 'OTHER CLAIM'
             lines.append(f"{prefix} {tid}: {compact(task['title'], 100)}; {task['status']}; "
                          f"owner={names.get(task['owner'], task['owner'] or 'unassigned')} ({task['owner']}); "
@@ -172,7 +191,8 @@ def run_hook(payload, state_root=STATE_ROOT, call=call_desk, clock=time.time):
             started = time.monotonic()
             for page in range(10):
                 response = call('check_in', {'session_key': state['session_key'], 'since': state.get('cursor', 0)})
-                new, paused = collect(state, response, initial and page == 0)
+                new, paused = collect(state, response, initial and page == 0,
+                                      full=(event == 'SessionStart' and page == 0))
                 lines.extend(new)
                 if len(response['events']) < 100:
                     break
