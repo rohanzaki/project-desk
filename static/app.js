@@ -14,7 +14,7 @@ const project=()=>$('#project').value.trim()||'media-intelligence';
 const taskFor=id=>board?.tasks.find(task=>task.id===id);
 const sessionFor=id=>board?.sessions.find(session=>session.id===id);
 const shortId=id=>id?String(id).slice(-8):'';
-const name=id=>id==='rohan'?'the owner':sessionFor(id)?.name||id||'Unassigned';
+const name=id=>id==='rohan'?'Human':sessionFor(id)?.name||id||'Unassigned';
 const taskOwner=task=>task.owner||task.assigned_to||'';
 const agentKind=id=>{
   if(id==='rohan')return 'rohan';
@@ -26,13 +26,13 @@ const initials=id=>{
   const label=id==='all'?'All':name(id);
   return label.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]).join('').toUpperCase()||'?';
 };
-const agentTitle=id=>({rohan:'the owner',codex:'Codex',claude:'Claude',all:'Everyone',unknown:'Unknown'}[agentKind(id)]||name(id));
+const agentTitle=id=>({rohan:'Human',codex:'Codex',claude:'Claude',all:'Everyone',unknown:'Unknown'}[agentKind(id)]||name(id));
 const agentChip=(id,extra='')=>`<span class="agent-chip agent-${esc(agentKind(id))} ${extra}"><span class="agent-avatar">${esc(initials(id))}</span><span>${esc(agentTitle(id))}</span></span>`;
 const sessionLabel=id=>{
   const session=sessionFor(id);
   return session?`${session.name} · ${session.branch} · ${shortId(session.id)}${session.imported?' · imported':''}`:name(id);
 };
-const recipientLabel=id=>({all:'Everyone',rohan:'the owner',codex:'All Codex sessions',claude:'All Claude sessions'}[id]||sessionLabel(id));
+const recipientLabel=id=>({all:'Everyone',rohan:'Human',codex:'All Codex sessions',claude:'All Claude sessions'}[id]||sessionLabel(id));
 const activeSessions=()=>board.sessions.filter(session=>!session.imported);
 const notificationKey=projectName=>`project-desk:last-seen:${projectName}`;
 const pinKey=projectName=>`project-desk:pinned-tasks:${projectName}`;
@@ -97,7 +97,7 @@ function renderNotifications(){
 function recipientOptions(value='all',include=''){
   const options=[
     {value:'all',label:'Everyone'},
-    {value:'rohan',label:'the owner'},
+    {value:'rohan',label:'Human'},
     {value:'codex',label:'All Codex sessions'},
     {value:'claude',label:'All Claude sessions'}
   ];

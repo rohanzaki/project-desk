@@ -1,5 +1,6 @@
 from starlette.testclient import TestClient
 from server import create_app
+from server import PROJECT
 
 def test_dashboard_api_and_origin_protection(tmp_path):
     app=create_app(tmp_path/'db.sqlite3',tmp_path/'ROSTER.md')
@@ -19,7 +20,7 @@ def test_dashboard_api_and_origin_protection(tmp_path):
 
 def test_dashboard_can_reopen_and_reassign_a_completed_task(tmp_path):
     app=create_app(tmp_path/'db.sqlite3',tmp_path/'ROSTER.md')
-    target=app.state.store.register('Codex reopen target','codex','media-intelligence','test/reopen','/tmp/reopen')
+    target=app.state.store.register('Codex reopen target','codex',PROJECT,'test/reopen','/tmp/reopen')
     with TestClient(app) as client:
         headers={'X-Project-Desk':'dashboard'}
         created=client.post('/api/action',headers=headers,json={'action':'create','data':{
@@ -44,8 +45,8 @@ def test_dashboard_can_reopen_and_reassign_a_completed_task(tmp_path):
 
 def test_reopen_refuses_active_tasks_and_resource_conflicts(tmp_path):
     app=create_app(tmp_path/'db.sqlite3',tmp_path/'ROSTER.md')
-    target=app.state.store.register('Codex reopen target','codex','media-intelligence','test/reopen','/tmp/reopen')
-    owner=app.state.store.register('Claude active owner','claude','media-intelligence','test/active','/tmp/active')
+    target=app.state.store.register('Codex reopen target','codex',PROJECT,'test/reopen','/tmp/reopen')
+    owner=app.state.store.register('Claude active owner','claude',PROJECT,'test/active','/tmp/active')
     with TestClient(app) as client:
         headers={'X-Project-Desk':'dashboard'}
         created=client.post('/api/action',headers=headers,json={'action':'create','data':{
@@ -72,7 +73,7 @@ def test_mcp_notification_binding_uses_authenticated_agent(tmp_path, monkeypatch
     import json
     monkeypatch.setattr(server, 'STATE_ROOT', tmp_path / 'bindings/codex')
     app=create_app(tmp_path/'db.sqlite3',tmp_path/'ROSTER.md')
-    registered=app.state.store.register('Claude binding test','claude','media-intelligence','test','/tmp/claude')
+    registered=app.state.store.register('Claude binding test','claude',PROJECT,'test','/tmp/claude')
     thread='33333333-3333-3333-3333-333333333333'
     with TestClient(app) as client:
         response=client.post('/mcp',headers={'Accept':'application/json, text/event-stream'},json={

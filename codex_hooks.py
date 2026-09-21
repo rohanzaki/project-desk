@@ -18,6 +18,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 STATE_ROOT = Path.home() / '.local/state/project-desk/codex'
+# Quoted verbatim to agents, so they have to be right for THIS installation.
+# Hardcoding one maintainer's home directory made the instruction wrong for
+# everyone else who ran it.
+RULES_PATH = os.environ.get('PROJECT_DESK_RULES', str(ROOT.parent / 'AGENTS.md'))
+DESK_CLI = os.environ.get('PROJECT_DESK_CLI', str(ROOT / 'desk'))
 EVENTS = ('SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop')
 
 
@@ -254,10 +259,10 @@ def enrollment_hint(payload, agent, state_root):
         return {}
     private_write(stamp, {'hinted_at': time.time()})
     context = (f'Project Desk notification hooks are installed for {agent}, but this actual agent session '
-               f'({thread}) is not yet bound. Read /path/to/mi-coordination/AGENTS.md. If you already '
+               f'({thread}) is not yet bound. Read {RULES_PATH}. If you already '
                'registered with Project Desk in this session, use that existing private key; do not register again. '
                'Otherwise register once. Then call enable_notifications(session_key, agent_session_id) with '
-               f'agent_session_id={thread}. Use /path/to/mi-coordination/project-desk/desk as fallback. '
+               f'agent_session_id={thread}. Use {DESK_CLI} as fallback. '
                'Keep keys private. This binds lifecycle inbox delivery, not idle wakeup or automatic task acceptance.')
     return output_for(event, context, payload)
 
