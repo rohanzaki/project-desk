@@ -54,6 +54,12 @@ def overlaps(a, b):
     return a == '.' or b == '.' or a == b or a.startswith(b + '/') or b.startswith(a + '/')
 
 
+# The human owner's identity on the board. 'rohan' is the id this project
+# originally shipped with; it stays as the stored value so existing messages and
+# receipts keep resolving. Clients should send 'human', which is aliased to it.
+HUMAN = 'rohan'
+
+
 class Store:
     CONTEXT_COMMENT_LIMIT = 50
     CONTEXT_HANDOFF_LIMIT = 20
@@ -202,7 +208,7 @@ class Store:
                 if t['assigned_to'] not in ('', s['kind'], s['id']):
                     raise Conflict('Task is assigned to another agent')
                 if t['human_paused']:
-                    raise Conflict('the owner paused this task')
+                    raise Conflict('The human owner paused this task')
                 # Preserve the queued scope; expanding it requires an explicit update later.
                 if resources != t['resources']:
                     raise Conflict('Claim the queued task using its exact resources')
@@ -231,7 +237,7 @@ class Store:
         with self.connection(True) as c:
             s,t = self.own(c,key,task_id,version)
             if t['human_paused'] and status != 'PAUSED':
-                raise Conflict('the owner paused this task; only the owner can resume or close it')
+                raise Conflict('The human owner paused this task; only they can resume or close it')
             if t['status'] == 'DONE':
                 raise Conflict('Completed tasks are immutable; create a follow-up task')
             new_resources = scopes(resources) if resources is not None else t['resources']
@@ -254,7 +260,7 @@ class Store:
             if t['project'] != s['project']:
                 raise PermissionError('Task belongs to another project')
             if t['version'] != version or t['status'] == 'DONE' or t['human_paused']:
-                raise Conflict('Task changed, completed, or paused by the owner')
+                raise Conflict('Task changed, completed, or paused by the human owner')
             accepted_brief_id = None
             if accept:
                 if t['pending_owner'] != s['id']:
@@ -310,7 +316,7 @@ class Store:
             if t['version'] != version:
                 raise Conflict('Task changed; check_in and use its latest version')
             if t['status'] == 'DONE' or t['human_paused']:
-                raise Conflict('Task is completed or paused by the owner')
+                raise Conflict('Task is completed or paused by the human owner')
             if t['owner'] != s['id']:
                 raise PermissionError('Only the owner can prepare a handoff')
             target = c.execute('''SELECT id,name,kind,project,branch,worktree,last_seen,imported
@@ -407,7 +413,13 @@ class Store:
             return self._message(c,s['project'],s['id'],recipient,body,task_id)
 
     def _message(self,c,project,sender,recipient,body,task_id=None):
-        if recipient not in ('all','codex','claude','rohan'):
+        # 'human' is the name to use; 'rohan' is the original id this project
+        # shipped with and is kept as an alias so existing rows and any client
+        # still sending it keep working. Renaming the stored id would be a data
+        # migration, not a rename.
+        if recipient == 'human':
+            recipient = HUMAN
+        if recipient not in ('all','codex','claude',HUMAN):
             if not c.execute('SELECT 1 FROM sessions WHERE id=? AND project=?',(recipient,project)).fetchone():
                 raise ValueError('Unknown recipient in this project')
         if task_id and self.task(c,task_id)['project'] != project:
@@ -460,7 +472,7 @@ class Store:
 
     def note(self,key,body,kind='note'):
         if kind not in ('note','proposal','finding'):
-            raise ValueError('Agents can post notes, findings, or proposals. the owner records decisions.')
+            raise ValueError('Agents can post notes, findings, or proposals. Only the human records decisions.')
         with self.connection(True) as c:
             s=self.auth(c,key)
             return self._note(c,s['project'],s['id'],body,kind)
