@@ -21,6 +21,7 @@ STATE_ROOT = Path.home() / '.local/state/project-desk/codex'
 # Quoted verbatim to agents, so they have to be right for THIS installation.
 # Hardcoding one maintainer's home directory made the instruction wrong for
 # everyone else who ran it.
+PROJECT = os.environ.get('PROJECT_DESK_PROJECT', 'default')
 RULES_PATH = os.environ.get('PROJECT_DESK_RULES', str(ROOT.parent / 'AGENTS.md'))
 DESK_CLI = os.environ.get('PROJECT_DESK_CLI', str(ROOT / 'desk'))
 EVENTS = ('SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop')
@@ -251,7 +252,7 @@ def enrollment_hint(payload, agent, state_root):
         return {}
     cwd = Path(payload.get('cwd', '/')).resolve()
     try:
-        with urllib.request.urlopen('http://127.0.0.1:7331/api/state?project=media-intelligence', timeout=1) as response:
+        with urllib.request.urlopen(f'http://127.0.0.1:7331/api/state?project={PROJECT}', timeout=1) as response:
             board = json.load(response)
         if not any(cwd == Path(s['worktree']) or Path(s['worktree']) in cwd.parents for s in board['sessions']):
             return {}
@@ -302,7 +303,7 @@ def main():
     enroll = sub.add_parser('bind')
     enroll.add_argument('--thread', required=True)
     enroll.add_argument('--session-file', type=Path, required=True)
-    enroll.add_argument('--project', default='media-intelligence')
+    enroll.add_argument('--project', default=PROJECT)
     enroll.add_argument('--agent', choices=('codex', 'claude'), default='codex')
     args = parser.parse_args()
     try:

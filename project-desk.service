@@ -4,8 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/path/to/mi-coordination/project-desk
-ExecStart=/path/to/mi-coordination/project-desk/.venv/bin/python /path/to/mi-coordination/project-desk/server.py
+WorkingDirectory=project-desk
+ExecStart=.venv/bin/python server.py
 Restart=on-failure
 RestartSec=3
 UMask=0077

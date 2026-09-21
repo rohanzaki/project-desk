@@ -1,3 +1,7 @@
+"""One-off migration of this installation's pre-Desk Markdown rosters.
+
+Kept for provenance. It hardcodes the project slug it was written for and is
+not part of the general tool — new installations do not need it."""
 """One-time import of the shared Markdown roster; preserves reported status and evidence."""
 import argparse
 import hashlib

@@ -2,21 +2,21 @@
 
 ## Project Desk is the live roster
 
-the owner authorized Project Desk on 2026-09-18. Both agents must use the same service
+the human owner authorized Project Desk on 2026-09-18. Both agents must use the same service
 from every branch, clone, and worktree. This AGENTS.md remains the shared rules
 entry point; live tasks, claims, messages and notes are stored in Project Desk.
 
-- Dashboard for the owner: http://127.0.0.1:7331/
+- Dashboard for the human owner: http://127.0.0.1:7331/
 - MCP server: `project-desk`, endpoint http://127.0.0.1:7331/mcp
-- Project slug: `media-intelligence` for this codebase across every worktree/clone.
-- Generated roster: `/path/to/mi-coordination/ROSTER.md` (read-only).
-- Claude handout: `/path/to/mi-coordination/CLAUDE-HANDOUT.md`.
-- Service/code: `/path/to/mi-coordination/project-desk/`.
-- Exact shared rules path: `/path/to/mi-coordination/AGENTS.md`.
+- Project slug: `<your-project-slug>` for this codebase across every worktree/clone.
+- Generated roster: `ROSTER.md` (read-only).
+- Claude handout: `CLAUDE-HANDOUT.md`.
+- Service/code: ``.
+- Exact shared rules path: `AGENTS.md`.
 
 Do not maintain a competing live Markdown table. Legacy roster entries were
 archived and imported with their reported status. Imported active claims remain
-reserved; the owner can reassign one to the owner's newly registered session.
+reserved; the human owner can reassign one to the owner's newly registered session.
 
 ## Required coordination loop
 
@@ -25,11 +25,11 @@ reserved; the owner can reassign one to the owner's newly registered session.
    Read its local `docs/SERVER-BLUEPRINT.md` before infra work; never commit it or
    copy credentials/environment values into Project Desk.
 2. Call `register_session` once per real session with a unique descriptive name,
-   agent `codex` or `claude`, project `media-intelligence`, current branch and
+   agent `codex` or `claude`, project `<your-project-slug>`, current branch and
    absolute worktree. Keep session_key private; persist it only in a private local
    session file if needed. Do not publish it in code, logs, shared notes or commits.
 3. Call `check_in` before edits, after long operations, at scope changes and
-   milestones, before deployments and before ending a turn. Read claims, the owner's
+   milestones, before deployments and before ending a turn. Read claims, the human owner's
    decisions, inbox and handoff offers. Keep the returned cursor; page through
    batches of 100 events until caught up. Explicitly acknowledge messages read.
 4. Before editing, `claim_task` with title, exact repo-relative files/directories
@@ -51,7 +51,7 @@ reserved; the owner can reassign one to the owner's newly registered session.
 7. Use `offer_handoff` and `accept_handoff` for transfers. The original owner keeps
    the claim until the recipient accepts. Silence and stale check-ins are not
    consent. Never forge another session's identity or use dashboard-only APIs to
-   bypass task ownership or a pause set by the owner.
+   bypass task ownership or a pause set by the human owner.
    For sign-off or a substantial transfer, prefer `prepare_handoff` with progress,
    remaining work, validation, risks, commit/base, branch, absolute worktree and
    changed paths. The receiver reads `get_task_context` and verifies the source
@@ -60,15 +60,15 @@ reserved; the owner can reassign one to the owner's newly registered session.
 8. Before ending a turn, record actual status and next action. DONE requires a
    completion summary and validation evidence; record commit_ref and deployment
    separately. PAUSED and BLOCKED retain claims. Respect explicit user pauses
-   until released; only the owner can lift a dashboard pause. Claims do not expire
+   until released; only the human owner can lift a dashboard pause. Claims do not expire
    merely because an agent disconnected.
 
 Use isolated Linux-disk worktrees for application changes, builds and tests. Only
-one production app deployment may run at a time: claim `service:mintel-app-deploy`
+one production app deployment may run at a time: claim `service:<your-deploy-lane>`
 for an already authorized deployment and follow the working notes. Project Desk
 records coordination; it does not execute or intercept shell edits or deployments.
 
-the owner's 2026-09-18 instruction: never run `pm2 kill` on any server; operate on the
+the human owner's 2026-09-18 instruction: never run `pm2 kill` on any server; operate on the
 selected service by exact name. The recovery report also prohibits fleet-wide
 PM2 commands (`pm2 update`, `stop all`, `delete all`) and bare `pm2 save` on the
 production boxes. Use `/path/to/bin/pm2-dump-guard.sh safe-save` when saving is
@@ -92,7 +92,7 @@ The dashboard bell's seen marker is separate from each agent's read receipt.
 
 ## Shared GSD project knowledge
 
-The maintained onboarding checkout is `/path/to/mi-gsd-onboarding`
+The maintained onboarding checkout is `$HOME/mi-gsd-onboarding`
 (`feat/gsd-onboarding`, isolated Linux clone). From any application worktree,
 read its `docs/engineering/README.md` and `.planning/STATE.md` before planning.
 The seven `.planning/codebase/` maps cover architecture, structure, stack,
@@ -110,14 +110,14 @@ marker does not include a peer's uncommitted changes or establish runtime health
 Project Desk owns live tasks, messages and handoffs; GSD files own durable plans
 and source knowledge. Do not create a second live roster or overwrite a peer's
 roadmap. The onboarding files are not merged into every branch automatically.
-Choose the next feature milestone with the owner, deepen its relevant maps, then
+Choose the next feature milestone with the human owner, deepen its relevant maps, then
 discuss, define its UI contract when applicable, plan, execute and verify.
 
 ## Existing sessions and outages
 
 New MCP tools may require a client restart/reconnect. Save work before restarting.
 For a session whose tools have not reloaded, use the same service through:
-`/path/to/mi-coordination/project-desk/desk list`.
+`desk list`.
 Call a tool with `desk TOOL --json-file /path/to/private-args.json`, or read JSON
 from stdin with `--json-file -`. Do not expose keys in shared artifacts.
 
@@ -126,6 +126,6 @@ unavailable, preserve a local handoff and avoid new overlapping edits/deployment
 until coordination returns. ROSTER.md is a timestamped snapshot, not a writable
 fallback. Keep this fixed-path rule in newly created worktree instructions.
 
-Earlier historical notes remain at `/path/to/CROSS-AGENT.md` and in the
+Earlier historical notes remain at `$HOME/CROSS-AGENT.md` and in the
 archived pre-Project-Desk AGENTS file alongside these rules. Prior pauses and
 unresolved disputes are not automatically released by migration.

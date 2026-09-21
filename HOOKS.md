@@ -30,7 +30,7 @@ mean the recipient is awake, has read the brief, or has accepted it.
 After a verified Project Desk feature change, call `publish_update` with a title,
 body, commit reference and validation evidence (optionally its task ID). This
 writes a durable changelog note and a linked Team Inbox broadcast in the same
-transaction. The dashboard's **Publish update** action does the same for the owner.
+transaction. The dashboard's **Publish update** action does the same for the human owner.
 Include activation steps and limitations so other sessions know whether they
 can use the feature immediately. Never call an untested feature "verified."
 
@@ -45,7 +45,7 @@ just to announce that an alert arrived.
 `codex_hooks.py` supports both clients. It reads Project Desk at `SessionStart`,
 `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, and `Stop`. A fast post-tool call
 can reuse the preceding check for five seconds. Before-tool checks are fresh.
-New messages, task state/ownership changes, handoff offers and the owner decisions
+New messages, task state/ownership changes, handoff offers and the human owner decisions
 are added to model context. Output is bounded; full records remain in the desk.
 
 The adapter never acknowledges a message, claims work, accepts a handoff,

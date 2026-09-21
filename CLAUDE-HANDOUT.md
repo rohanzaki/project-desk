@@ -1,7 +1,7 @@
-# Claude handout — use Project Desk with Codex and the owner
+# Claude handout — use Project Desk with Codex and the human owner
 
-the owner authorized Project Desk as the shared coordination system. Read
-`/path/to/mi-coordination/AGENTS.md` before work on Media Intelligence.
+the human owner authorized Project Desk as the shared coordination system. Read
+`AGENTS.md` before work on Media Intelligence.
 Live state is now in Project Desk, not manually edited Markdown rows.
 
 ## Connection
@@ -17,22 +17,22 @@ If the registration is missing, the setup command is:
 claude mcp add --transport http --scope user project-desk http://127.0.0.1:7331/mcp
 ```
 
-The same service is registered for Codex. the owner's dashboard is
+The same service is registered for Codex. the human owner's dashboard is
 http://127.0.0.1:7331/ . This loopback address works on the development machine.
 
 For existing sessions without MCP discovery, the fallback client is:
-`/path/to/mi-coordination/project-desk/desk`.
+`desk`.
 Run it with `list` to inspect the tool schemas, then call a tool with `--json-file`
 or JSON on stdin using `--json-file -`. It uses the same MCP endpoint and database.
 
 ## Rule to keep in Claude instructions
 
 > For Media Intelligence work, read
-> /path/to/mi-coordination/AGENTS.md and use the project-desk MCP server.
-> Register a unique session with project media-intelligence, current branch, and
+> AGENTS.md and use the project-desk MCP server.
+> Register a unique session with project <your-project-slug>, current branch, and
 > absolute worktree. Keep its session_key private. Call check_in before edits,
 > after long operations, at milestones, and before ending a turn. Read task claims,
-> the owner's decisions and inbox; explicitly acknowledge messages you have read.
+> the human owner's decisions and inbox; explicitly acknowledge messages you have read.
 > Claim tasks and literal repo-relative files/directories before editing. Treat
 > overlapping claims as a blocker for those paths. Request and accept explicit
 > handoffs; never infer consent from silence or stale presence. Preserve user
@@ -42,19 +42,19 @@ or JSON on stdin using `--json-file -`. It uses the same MCP endpoint and databa
 > If Project Desk is unavailable, record a local handoff and avoid new overlapping
 > edits or deployments until coordination is restored.
 
-A scoped pointer to this rule is installed in `/path/to/.claude/CLAUDE.md`.
+A scoped pointer to this rule is installed in `$HOME/.claude/CLAUDE.md`.
 Preserve it when maintaining instructions. New worktree instructions should point
 to the same shared AGENTS.md; do not create independent live rosters.
 
 ## First session checklist
 
 1. Call `register_session` with a descriptive name such as `Claude capture review`,
-   agent `claude`, project `media-intelligence`, and your actual branch/worktree.
+   agent `claude`, project `<your-project-slug>`, and your actual branch/worktree.
    Registration does not claim code. Save the returned session_id and session_key
    privately for this session. Never post session_key to shared notes.
 2. Call `check_in(session_key, since=0)`. Keep the returned cursor for the next
    check-in. Read imported claims and current instructions before choosing work.
-3. If your previous task is imported, ask the owner to reassign it to your registered
+3. If your previous task is imported, ask the human owner to reassign it to your registered
    session in the dashboard. Do not create an overlapping duplicate or mark an
    imported peer task complete. The importer preserved reported status and evidence;
    it did not infer active-session identity.
@@ -62,7 +62,7 @@ to the same shared AGENTS.md; do not create independent live rosters.
    Use paths such as `src/components/finance/capture-v2`, not absolute worktree paths
    or glob patterns. Directories reserve their descendants, including across clones.
 5. Update through `update_task` using the latest version from check_in. If a version
-   conflicts, re-read; do not overwrite another update. the owner's pauses cannot be
+   conflicts, re-read; do not overwrite another update. the human owner's pauses cannot be
    lifted by an agent. DONE requires a summary and actual validation evidence.
 6. Send questions or review requests with `send_message`; use the peer session ID
    for a specific coworker, `codex` for all Codex sessions, or `rohan` for the user.
@@ -75,7 +75,7 @@ to the same shared AGENTS.md; do not create independent live rosters.
 
 Use Linux worktrees. Respect existing ownership and pauses. Read the local working
 notes before building and the credential-bearing SERVER-BLUEPRINT before infra work;
-never copy its secrets into Project Desk. Claim `service:mintel-app-deploy` before
+never copy its secrets into Project Desk. Claim `service:<your-deploy-lane>` before
 an authorized production application deployment. The claim coordinates agents; it
 is not deployment approval and does not execute or guard the deploy script.
 
@@ -86,7 +86,7 @@ posted through `send_message` to `codex` once you have connected and read the ru
 ## Inbox hooks and task replies
 
 Lifecycle hook definitions for Claude live in `~/.claude/settings.json`; the
-adapter is `/path/to/mi-coordination/project-desk/codex_hooks.py`.
+adapter is `codex_hooks.py`.
 Preserve existing GSD hooks. Review/reload the client hook configuration through
 its supported flow. For full setup and limitations read `project-desk/HOOKS.md`
 beside the shared rules.
