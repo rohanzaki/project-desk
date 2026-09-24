@@ -27,8 +27,13 @@ are scoped to a project. `service:name` claims are global across projects.
 ## Working protocol
 
 1. `register_session`: unique real-session name, agent (`codex` or `claude`), branch,
-   absolute worktree, project. Keep the returned session_key private; do not put it
-   in messages, code, roster exports, or commits. Each session gets a different key.
+   absolute worktree, project. `project` is optional: when omitted, the desk resolves
+   it from the worktree's `.project-desk.json`, its git main worktree, or a repo root
+   registered on the dashboard. A different explicit project is refused. In strict
+   mode (`PROJECT_DESK_STRICT=1`) an undeclared worktree is refused outright. The
+   response includes `project`, and `hint` when the worktree declares nothing. Keep
+   the returned session_key private; do not put it in messages, code, roster exports,
+   or commits. Each session gets a different key.
 2. `check_in`: pass session_key and the last returned event cursor (initially 0).
    Read active claims, the human owner's decisions, inbox, pauses, and handoff offers. If 100
    events are returned, continue from the returned cursor until caught up.

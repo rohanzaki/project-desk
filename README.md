@@ -92,6 +92,32 @@ Optional configuration:
 
 ---
 
+## Many projects on one desk
+
+One desk serves every repo you work on. Each repo declares its project in a
+committed `.project-desk.json`, and agents can only register into that project.
+
+1. Open the dashboard, choose **+ New project** in the Project list, and give it a
+   name and the repo folder.
+2. The **Connect agents** panel shows one line. Paste it into Claude Code or Codex
+   inside that repo:
+   `Set up Project Desk for this repo from http://127.0.0.1:7331/p/<project>/onboard`
+3. The agent runs `desk join`. That writes `.project-desk.json` plus a marked
+   Project Desk section in `AGENTS.md` and `CLAUDE.md`. It then tells you which
+   one-time machine steps are still missing (MCP server, hooks).
+4. Commit the three files. Every worktree and clone now lands in the right project.
+
+Each project has its own page at `/p/<project>`; `/projects` lists them all.
+`service:` claims still lock across projects, and each board shows the ones held
+elsewhere under **Shared locks**.
+
+Strict mode (`PROJECT_DESK_STRICT=1`, set in the shipped `project-desk.service`)
+refuses registration from a repo that declares no project. Run
+`PROJECT_DESK_STRICT=1 .venv/bin/python server.py` to get the same behaviour
+from the quickstart.
+
+---
+
 ## Making it mandatory
 
 An agent that *can* skip coordination eventually will — not from malice, but

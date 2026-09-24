@@ -6,6 +6,7 @@ After=network.target
 Type=simple
 WorkingDirectory=project-desk
 ExecStart=.venv/bin/python server.py
+Environment=PROJECT_DESK_STRICT=1
 Restart=on-failure
 RestartSec=3
 UMask=0077
