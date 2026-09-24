@@ -137,15 +137,19 @@ function chooseInitialProject(){
     $('#notice').textContent=`Unknown project “${fromPath}”. Pick one from the list, or create it with + New project.`;
   }
   currentProject=[fromPath,storedProject(),FALLBACK_PROJECT].find(slug=>slug&&known(slug))||projects[0]?.slug||FALLBACK_PROJECT;
+  rememberProject(currentProject);
 }
 function showBoard(){
   $('#projects-overview').hidden=true;
   $('.overview-strip').hidden=false;
   $('.layout').hidden=false;
+  $('#activity-history').hidden=false;
 }
 function renderOverview(){
   $('.overview-strip').hidden=true;
   $('.layout').hidden=true;
+  $('#activity-history').hidden=true;
+  $('#shared-locks').hidden=true;
   const section=$('#projects-overview');
   section.hidden=false;
   section.innerHTML='<h3>All projects</h3><div class="project-cards">'+projects.filter(item=>!item.hidden).map(item=>`
@@ -164,7 +168,9 @@ function switchProject(slug){
   showBoard();renderProjectSelect();refresh();
 }
 function renderSharedLocks(){
-  const box=$('#shared-locks'),locks=board?.shared_locks||[];
+  const box=$('#shared-locks');
+  if(onOverview()){box.hidden=true;return;}
+  const locks=board?.shared_locks||[];
   box.hidden=!locks.length;
   box.textContent=locks.length?'Shared locks held in other projects: '+locks.map(lock=>`${lock.resource} (${lock.project}, ${shortId(lock.task_id)})`).join(' · '):'';
 }
@@ -175,6 +181,7 @@ function openNewProject(){
     async data=>{
       const slug=(data.slug||data.name).trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
       const roots=(data.repo_roots||'').split('\n').map(line=>line.trim()).filter(Boolean);
+      if(!roots.length)throw Error('Add at least one repo folder (absolute path).');
       await mutate('project.create',{slug,name:data.name.trim(),repo_roots:roots});
       await loadProjects();
       switchProject(slug);

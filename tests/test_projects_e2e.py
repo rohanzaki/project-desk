@@ -101,3 +101,24 @@ def test_shared_locks_are_shown(desk_service, page):
     desk_service['desk'].claim(other['session_key'], 'Deploy', ['service:gpu-box'], 'Ship')
     open_page(page, desk_service['base'] + '/p/shop-app')
     expect(page.locator('#shared-locks')).to_contain_text('service:gpu-box')
+
+
+def test_overview_hides_board_scoped_ui(desk_service, page):
+    other = desk_service['desk'].register('Deployer', 'codex', 'media-intelligence', 'main', '/tmp/mi-deploy-overview')
+    desk_service['desk'].claim(other['session_key'], 'Deploy', ['service:gpu-box'], 'Ship')
+    open_page(page, desk_service['base'] + '/p/shop-app')
+    expect(page.locator('#shared-locks')).to_contain_text('service:gpu-box')
+    open_page(page, desk_service['base'] + '/projects')
+    expect(page.locator('#shared-locks')).to_be_hidden()
+    expect(page.locator('#activity-history')).to_be_hidden()
+    expect(page.locator('.project-card')).to_have_count(2)
+
+
+def test_new_project_requires_a_repo_folder(desk_service, page):
+    open_page(page, desk_service['base'])
+    page.select_option('#project', '__new__')
+    page.fill('#editor-fields input[name="name"]', 'No Repo App')
+    page.fill('#editor-fields input[name="slug"]', 'no-repo-app')
+    page.click('#save')
+    expect(page.locator('#form-error')).to_contain_text('Add at least one repo folder')
+    assert all(p['slug'] != 'no-repo-app' for p in desk_service['desk'].list_projects())
