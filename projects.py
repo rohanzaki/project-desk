@@ -73,7 +73,7 @@ def resolve_project(path, registry=None, timeout=2):
     """Resolve the project for `path`. `registry` maps slug -> list of repo roots."""
     try:
         start = Path(path).resolve()
-    except (OSError, RuntimeError, TypeError):
+    except (OSError, RuntimeError, TypeError, ValueError):
         return None
     # 1. Walk up to the first declaration, stopping at the repo root (a directory
     #    holding .git), so a stray file above the repo cannot claim it.
@@ -94,7 +94,7 @@ def resolve_project(path, registry=None, timeout=2):
         for root in roots:
             try:
                 root_path = Path(root).resolve()
-            except (OSError, RuntimeError, TypeError):
+            except (OSError, RuntimeError, TypeError, ValueError):
                 continue
             if _within(start, root_path) or (main is not None and _within(main, root_path)):
                 return Resolution(slug, 'registry', str(root_path))

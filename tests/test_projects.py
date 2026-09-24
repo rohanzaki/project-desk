@@ -86,6 +86,15 @@ def test_git_timeout_counts_as_no_project(tmp_path, monkeypatch):
     assert projects.resolve_project(tmp_path) is None
 
 
+def test_nul_byte_path_resolves_to_none():
+    assert projects.resolve_project('/tmp/a\x00b') is None
+
+
+def test_registry_root_with_nul_byte_is_skipped(tmp_path):
+    registry = {'x': ['/tmp/bad\x00root']}
+    assert projects.resolve_project(tmp_path, registry) is None
+
+
 def test_slug_and_display_name():
     assert projects.valid_slug('shop-app') and not projects.valid_slug('Shop')
     assert not projects.valid_slug('-x') and not projects.valid_slug('')
