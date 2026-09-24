@@ -243,7 +243,11 @@ def create_app(db=None, roster=None):
         except PermissionError as e: return JSONResponse({'error':str(e)},403)
 
     def desk_base(request):
-        return f"{request.url.scheme}://{request.headers.get('host',f'127.0.0.1:{PORT}')}"
+        host,port=request.scope['server']
+        scheme=request.url.scheme
+        if port=={'http':80,'https':443}.get(scheme):
+            return f'{scheme}://{host}'
+        return f'{scheme}://{host}:{port}'
     def known(slug):
         try: return store.project(slug)
         except ValueError: return None

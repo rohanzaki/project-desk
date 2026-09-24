@@ -66,6 +66,18 @@ def test_strict_mode_from_environment(tmp_path, monkeypatch):
     assert create_app(tmp_path / 'b.sqlite3', tmp_path / 'R.md').state.store.strict is True
 
 
+def test_desk_base_ignores_host_header_port(tmp_path):
+    with TestClient(app_for(tmp_path)) as client:
+        create(client)
+        spoofed = {'Host': 'localhost:6666'}
+        connect = client.get('/api/projects/xyz-app/connect', headers=spoofed)
+        assert '6666' not in connect.text
+        onboard = client.get('/p/xyz-app/onboard', headers=spoofed)
+        assert '6666' not in onboard.text
+        declaration = client.get('/p/xyz-app/files/.project-desk.json', headers=spoofed)
+        assert '6666' not in declaration.json()['desk']
+
+
 def test_roster_shows_only_its_own_project(tmp_path):
     with TestClient(app_for(tmp_path)) as client:
         client.post('/api/action', headers=H, json={'action': 'create', 'data': {
