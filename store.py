@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from projects import DEFAULT_DESK, display_name, valid_slug
+from projects import DECLARATION, DEFAULT_DESK, display_name, resolve_project, valid_slug
 
 
 class Conflict(ValueError):
@@ -288,19 +288,58 @@ class Store:
     def register(self, name, kind, project, branch, worktree):
         if kind not in ('codex', 'claude'):
             raise ValueError('Agent kind must be codex or claude')
-        text(project, 'project', 100)
-        if not re.fullmatch(r'[a-z0-9][a-z0-9-]*', project):
+        requested = (project or '').strip()
+        if requested and not valid_slug(requested):
             raise ValueError('Use a lowercase project slug')
-        if not Path(worktree).is_absolute():
+        if not isinstance(worktree, str) or not Path(worktree).is_absolute():
             raise ValueError('Worktree must be an absolute path')
+        # Resolve outside the write transaction: it may run git (bounded by a timeout).
+        with self.connection() as c:
+            registry = self.registry(c)
+        declared = resolve_project(worktree, registry)
+        hint = None
+        if declared:
+            if requested and requested != declared.project:
+                raise ValueError(f'This worktree belongs to project {declared.project} '
+                                 f'(declared by {DECLARATION} or the desk for {declared.root}). '
+                                 f'Register with project {declared.project}, or omit project.')
+            project = declared.project
+        elif self.strict:
+            raise ValueError('This worktree is not connected to a Project Desk project, so the desk '
+                             'cannot tell which project you belong to. Ask the human to connect this '
+                             f'repo at {self.desk_url}/projects, then register again.')
+        else:
+            project = requested or self.default_project
+            hint = ('This worktree declares no project. Connect the repo (it adds '
+                    f'{DECLARATION}) at {self.desk_url}/projects so every agent here lands '
+                    'in the same project.')
         key, sid = secrets.token_urlsafe(32), ident('s-')
         with self.connection(True) as c:
+            self._ensure_project(c, project)
             c.execute('INSERT INTO sessions VALUES(?,?,?,?,?,?,?,?,0)',
                       (sid, hashlib.sha256(key.encode()).hexdigest(), text(name,'name',120), kind,
                        project, text(branch,'branch',250), text(worktree,'worktree',1000), now()))
             self.event(c, project, sid, 'session.registered', {'name': name, 'kind': kind})
-        return {'session_id': sid, 'session_key': key,
-                'instruction': 'Keep the key private for this session; use check_in before edits and at milestones.'}
+        result = {'session_id': sid, 'session_key': key, 'project': project,
+                  'instruction': 'Keep the key private for this session; use check_in before edits and at milestones.'}
+        if hint:
+            result['hint'] = hint
+        return result
+
+    def session_mismatches(self, hours=6):
+        """Recently seen sessions whose worktree now declares a different project."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+        with self.connection() as c:
+            registry = self.registry(c)
+            rows = [dict(r) for r in c.execute(
+                'SELECT id,name,kind,project,worktree,last_seen FROM sessions WHERE imported=0 AND last_seen>?',
+                (cutoff,))]
+        report = []
+        for row in rows:
+            declared = resolve_project(row['worktree'], registry)
+            if declared and declared.project != row['project']:
+                report.append({**row, 'declared': declared.project, 'source': declared.source})
+        return report
 
     def task(self, c, task_id):
         row = c.execute('SELECT * FROM tasks WHERE id=?', (task_id,)).fetchone()
