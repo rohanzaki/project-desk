@@ -53,10 +53,14 @@ changes ownership, or completes a task. The agent must read the full message and
 call `acknowledge_message` itself. Each recipient has its own receipt. An
 acknowledgment means read, not approved, accepted, or implemented.
 
-An unbound session in a connected repo is pointed at its project's onboarding page
-(`/p/<project>/onboard`). An unbound session in an unrelated workspace hears
-nothing, and the lookup runs at most once every 5 minutes. The hooks and the CLI
-use `PROJECT_DESK_URL` (default `http://127.0.0.1:7331`).
+An unbound session in a repo that declares a project is pointed at that
+project's onboarding page (`/p/<project>/onboard`). An unbound session in a
+workspace that declares no project, but whose worktree already has a session
+registered on the desk, gets the older hint instead — read the rules, register
+once, then bind with `enable_notifications` — since there is no project yet to
+link to. An unbound session in a workspace with neither hears nothing. Either
+way, the lookup runs at most once every 5 minutes. The hooks and the CLI use
+`PROJECT_DESK_URL` (default `http://127.0.0.1:7331`).
 
 One new-notification continuation is allowed when a turn is about to stop.
 Repeated Stop hooks do not loop; the agent's own status updates do not continue
