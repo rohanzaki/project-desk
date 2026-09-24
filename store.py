@@ -277,6 +277,71 @@ class Store:
                        {k: (json.loads(v) if k == 'repo_roots' else v) for k, v in changes.items()})
             return self._project_row(c.execute('SELECT * FROM projects WHERE slug=?', (slug,)).fetchone())
 
+    def move_project(self, source, target, worktree_prefix, apply=False, idle_hours=6, export_path=''):
+        """Move a repo's records between projects. Dry run unless apply=True.
+
+        Only sessions under worktree_prefix and idle for idle_hours move, with the
+        tasks they own and those tasks' claims, messages, notes and handoff briefs.
+        Live sessions stay put: their hook binding records the old project.
+        Events stay as history. All-or-nothing.
+        """
+        if not (valid_slug(source) and valid_slug(target)) or source == target:
+            raise ValueError('Name two different project slugs')
+        prefix = text(worktree_prefix, 'worktree prefix', 1000)
+        if not Path(prefix).is_absolute():
+            raise ValueError('Worktree prefix must be an absolute path')
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=idle_hours)).isoformat()
+        with self.connection(True) as c:
+            under = [dict(r) for r in c.execute(
+                'SELECT id,name,worktree,last_seen FROM sessions WHERE project=?', (source,))
+                if r['worktree'].startswith(prefix)]
+            moving = [s for s in under if s['last_seen'] <= cutoff]
+            live = [s for s in under if s['last_seen'] > cutoff]
+            ids = [s['id'] for s in moving]
+            marks = ','.join('?' * len(ids))
+            tasks = [dict(r) for r in c.execute(
+                f'SELECT id,title,status,resources FROM tasks WHERE project=? AND owner IN ({marks})',
+                (source, *ids))] if ids else []
+            task_ids = [t['id'] for t in tasks]
+            tmarks = ','.join('?' * len(task_ids))
+            for t in tasks:                      # open claims must not collide in the target
+                if t['status'] == 'DONE':
+                    continue
+                for existing in c.execute('SELECT * FROM claims WHERE project=? AND task_id!=?', (target, t['id'])):
+                    if any(overlaps(r, existing['resource']) for r in json.loads(t['resources'])):
+                        raise Conflict(f"Task {t['id']} would overlap {existing['resource']} "
+                                       f"held by {existing['task_id']} in {target}")
+            message_ids = [r['id'] for r in c.execute(
+                f'''SELECT id FROM messages WHERE project=? AND (sender IN ({marks}) OR recipient IN ({marks})
+                    {f"OR task_id IN ({tmarks})" if task_ids else ''})''',
+                (source, *ids, *ids, *task_ids))] if ids else []
+            note_ids = [r['id'] for r in c.execute(
+                f'SELECT id FROM notes WHERE project=? AND author IN ({marks})', (source, *ids))] if ids else []
+            brief_ids = [r['id'] for r in c.execute(
+                f'SELECT id FROM handoff_briefs WHERE project=? AND task_id IN ({tmarks})',
+                (source, *task_ids))] if task_ids else []
+            report = {'source': source, 'target': target, 'apply': bool(apply),
+                      'sessions': moving, 'skipped_live': live,
+                      'tasks': [{'id': t['id'], 'title': t['title'], 'status': t['status']} for t in tasks],
+                      'messages': len(message_ids), 'notes': len(note_ids), 'handoff_briefs': len(brief_ids)}
+            if not apply or not ids:
+                return report
+            self._ensure_project(c, target)
+            for table, key, values in (('sessions', 'id', ids), ('tasks', 'id', task_ids),
+                                       ('claims', 'task_id', task_ids), ('messages', 'id', message_ids),
+                                       ('notes', 'id', note_ids), ('handoff_briefs', 'id', brief_ids)):
+                if values:
+                    c.execute(f"UPDATE {table} SET project=? WHERE {key} IN ({','.join('?' * len(values))})",
+                              (target, *values))
+            summary = (f"Moved {len(ids)} sessions and {len(task_ids)} tasks here from '{source}' "
+                       f"(worktrees under {prefix}), with {len(message_ids)} messages and {len(note_ids)} notes."
+                       + (f' Export of the originals: {export_path}' if export_path else ''))
+            self._note(c, target, 'project-desk', summary, 'note')
+            for project in (source, target):
+                self.event(c, project, 'project-desk', 'project.moved',
+                           {'from': source, 'to': target, 'sessions': ids, 'tasks': task_ids})
+            return report
+
     def auth(self, c, key):
         digest = hashlib.sha256(key.encode()).hexdigest()
         row = c.execute('SELECT * FROM sessions WHERE secret_hash=?', (digest,)).fetchone()
