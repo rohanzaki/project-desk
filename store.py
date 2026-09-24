@@ -5,9 +5,11 @@ import re
 import secrets
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
+
+from projects import DEFAULT_DESK, display_name, valid_slug
 
 
 class Conflict(ValueError):
@@ -80,8 +82,11 @@ class Store:
     DIGEST_CHARS = 240
     DIGEST_FIELDS = ('summary', 'validation', 'next_step')
 
-    def __init__(self, path):
+    def __init__(self, path, strict=False, default_project='default', desk_url=DEFAULT_DESK):
         self.path = Path(path)
+        self.strict = bool(strict)
+        self.default_project = default_project
+        self.desk_url = desk_url.rstrip('/')
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connection() as c:
             c.executescript('''
@@ -125,7 +130,15 @@ class Store:
                 CREATE TABLE IF NOT EXISTS events (
                     seq INTEGER PRIMARY KEY AUTOINCREMENT, project TEXT NOT NULL,
                     actor TEXT NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL, created TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS projects (
+                    slug TEXT PRIMARY KEY, name TEXT NOT NULL, repo_roots TEXT NOT NULL DEFAULT '[]',
+                    rules_path TEXT NOT NULL DEFAULT '', archived INTEGER NOT NULL DEFAULT 0,
+                    created TEXT NOT NULL);
             ''')
+            # Every project already in use gets a row, so the dropdown lists it.
+            existing = [r[0] for r in c.execute('SELECT project FROM tasks UNION SELECT project FROM sessions')]
+            c.executemany('INSERT OR IGNORE INTO projects(slug,name,created) VALUES(?,?,?)',
+                          [(slug, display_name(slug), now()) for slug in existing])
         self.path.chmod(0o600)
 
     @contextmanager
@@ -147,6 +160,103 @@ class Store:
     def event(self, c, project, actor, kind, data):
         c.execute('INSERT INTO events(project,actor,kind,data,created) VALUES(?,?,?,?,?)',
                   (project, actor, kind, json.dumps(data), now()))
+
+    def _project_row(self, row):
+        item = dict(row)
+        item['repo_roots'] = json.loads(item['repo_roots'])
+        item['archived'] = bool(item['archived'])
+        return item
+
+    def _roots(self, values):
+        if isinstance(values, str):
+            values = [values]
+        if not isinstance(values, (list, tuple)) or len(values) > 20:
+            raise ValueError('Give up to 20 repo folders')
+        roots = []
+        for value in values:
+            value = text(value, 'repo folder', 1000)
+            if not Path(value).is_absolute():
+                raise ValueError('Repo folders must be absolute paths')
+            roots.append(str(Path(value)))
+        return sorted(set(roots))
+
+    def _ensure_project(self, c, slug):
+        c.execute('INSERT OR IGNORE INTO projects(slug,name,created) VALUES(?,?,?)',
+                  (slug, display_name(slug), now()))
+
+    def registry(self, c):
+        return {r['slug']: json.loads(r['repo_roots'])
+                for r in c.execute('SELECT slug, repo_roots FROM projects WHERE archived=0')}
+
+    def project(self, slug):
+        with self.connection() as c:
+            row = c.execute('SELECT * FROM projects WHERE slug=?', (slug,)).fetchone()
+            if not row:
+                raise ValueError('Unknown project')
+            return self._project_row(row)
+
+    def list_projects(self):
+        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
+        with self.connection(True) as c:
+            # A session or task can name a project between constructions of this
+            # Store (the one-shot __init__ backfill only sees what existed at
+            # open time), so re-sync here too — otherwise a project in active
+            # use would be invisible until the process restarts.
+            for row in c.execute('SELECT project FROM tasks UNION SELECT project FROM sessions'):
+                self._ensure_project(c, row[0])
+            out = []
+            for row in c.execute('SELECT * FROM projects ORDER BY archived, name').fetchall():
+                slug, item = row['slug'], self._project_row(row)
+                item['open_tasks'] = c.execute(
+                    "SELECT COUNT(*) FROM tasks WHERE project=? AND status!='DONE'", (slug,)).fetchone()[0]
+                item['unread_human'] = c.execute(
+                    '''SELECT COUNT(*) FROM messages m WHERE project=? AND recipient IN (?, 'all')
+                       AND sender!=? AND NOT EXISTS
+                       (SELECT 1 FROM receipts r WHERE r.message_id=m.id AND r.session_id=?)''',
+                    (slug, HUMAN, HUMAN, HUMAN)).fetchone()[0]
+                item['live_sessions'] = c.execute(
+                    'SELECT COUNT(*) FROM sessions WHERE project=? AND imported=0 AND last_seen>?',
+                    (slug, cutoff)).fetchone()[0]
+                item['last_activity'] = c.execute(
+                    'SELECT MAX(created) FROM events WHERE project=?', (slug,)).fetchone()[0]
+                item['hidden'] = item['archived'] or (slug == 'default' and item['open_tasks'] == 0)
+                out.append(item)
+            return out
+
+    def create_project(self, slug, name, repo_roots=()):
+        if not valid_slug(slug):
+            raise ValueError('Use a lowercase project slug: letters, digits and dashes')
+        name = text(name, 'project name', 120)
+        roots = self._roots(list(repo_roots))
+        with self.connection(True) as c:
+            if c.execute('SELECT 1 FROM projects WHERE slug=?', (slug,)).fetchone():
+                raise Conflict(f'Project {slug} already exists')
+            c.execute('INSERT INTO projects(slug,name,repo_roots,created) VALUES(?,?,?,?)',
+                      (slug, name, json.dumps(roots), now()))
+            self.event(c, slug, HUMAN, 'project.created', {'name': name, 'repo_roots': roots})
+            return self._project_row(c.execute('SELECT * FROM projects WHERE slug=?', (slug,)).fetchone())
+
+    def update_project(self, slug, name=None, repo_roots=None, rules_path=None, archived=None):
+        with self.connection(True) as c:
+            if not c.execute('SELECT 1 FROM projects WHERE slug=?', (slug,)).fetchone():
+                raise ValueError('Unknown project')
+            changes = {}
+            if name is not None:
+                changes['name'] = text(name, 'project name', 120)
+            if repo_roots is not None:
+                changes['repo_roots'] = json.dumps(self._roots(repo_roots))
+            if rules_path is not None:
+                rules_path = rules_path.strip()
+                if rules_path and not Path(rules_path).is_absolute():
+                    raise ValueError('Rules file must be an absolute path')
+                changes['rules_path'] = rules_path
+            if archived is not None:
+                changes['archived'] = 1 if archived else 0
+            for column, value in changes.items():   # column names come only from the fixed keys above
+                c.execute(f'UPDATE projects SET {column}=? WHERE slug=?', (value, slug))
+            self.event(c, slug, HUMAN, 'project.updated',
+                       {k: (json.loads(v) if k == 'repo_roots' else v) for k, v in changes.items()})
+            return self._project_row(c.execute('SELECT * FROM projects WHERE slug=?', (slug,)).fetchone())
 
     def auth(self, c, key):
         digest = hashlib.sha256(key.encode()).hexdigest()
@@ -630,6 +740,8 @@ class Store:
                 'handoff_briefs':self._handoffs(c,project,limit=self.SNAPSHOT_HANDOFF_LIMIT),
                 'notes':[dict(r) for r in c.execute('SELECT * FROM notes WHERE project=? ORDER BY created DESC LIMIT 100',(project,))],
                 'events':[dict(r) for r in c.execute('SELECT * FROM events WHERE project=? ORDER BY seq DESC LIMIT 100',(project,))],
+                'shared_locks':[{'resource':r['resource'],'task_id':r['task_id'],'project':r['project']}
+                                for r in c.execute("SELECT * FROM claims WHERE resource LIKE 'service:%' AND project!=?",(project,))],
                 'generated_at':now()}
 
     def snapshot(self,project):
