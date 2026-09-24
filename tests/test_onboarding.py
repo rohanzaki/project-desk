@@ -1,3 +1,4 @@
+from pathlib import Path
 import io
 import json
 import re
@@ -49,3 +50,16 @@ def test_kit():
     assert archive.read('.project-desk.json').decode() == onboarding.declaration(P, DESK)
     with pytest.raises(KeyError):
         onboarding.kit_file('../secret', P, DESK)
+
+
+def test_committed_repo_files_carry_no_local_paths():
+    """Files `desk join` writes into a repo get committed, possibly publicly:
+    they must never contain this machine's install path or home folder."""
+    for name in ('.project-desk.json', 'AGENTS.project-desk.md', 'CLAUDE.project-desk.md'):
+        text = onboarding.kit_file(name, P, DESK)
+        assert str(onboarding.ROOT) not in text, name
+        assert str(Path.home()) not in text, name
+        assert '/home/' not in text and '/Users/' not in text, name
+    # The per-machine pages (served locally, never committed) still give the exact commands.
+    assert str(onboarding.ROOT) in onboarding.onboard_md(P, DESK)
+    assert str(onboarding.ROOT) in onboarding.setup_md(P, DESK)

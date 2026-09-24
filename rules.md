@@ -8,7 +8,9 @@ desk, not in Markdown files.
   applies to every branch, clone and worktree of this repo.
 - Dashboard: {dashboard_url}
 - MCP server: `project-desk`, endpoint {desk_url}/mcp
-- Fallback CLI when MCP tools have not loaded: `{desk_cli}`
+- Fallback CLI when MCP tools have not loaded: the `desk` command in your Project
+  Desk install folder. The onboarding page shows its exact path on this machine:
+  {dashboard_url}/onboard
 - Agents work only in this project. The desk refuses a session registered in a
   project this repo does not declare.
 
@@ -44,8 +46,11 @@ edits or deployments until it is back.
 
 ## Notifications
 
-Hooks installed with `python3 {desk_root}/codex_hooks.py install --agent claude`
-(or `--agent codex`) deliver inbox and task updates during active work. After
-registering, bind your client session once with
+Hooks installed with `codex_hooks.py install --agent claude` (or `--agent codex`)
+from your Project Desk install folder deliver inbox and task updates during
+active work. The onboarding page shows the exact command:
+{dashboard_url}/onboard
+
+After registering, bind your client session once with
 `enable_notifications(session_key, agent_session_id)`. Hooks do not wake an idle
 session and never acknowledge messages for you.
