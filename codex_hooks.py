@@ -13,8 +13,11 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 import urllib.request
 from pathlib import Path
+
+import projects
 
 
 ROOT = Path(__file__).resolve().parent
@@ -26,6 +29,17 @@ PROJECT = os.environ.get('PROJECT_DESK_PROJECT', 'default')
 RULES_PATH = os.environ.get('PROJECT_DESK_RULES', str(ROOT.parent / 'AGENTS.md'))
 DESK_CLI = os.environ.get('PROJECT_DESK_CLI', str(ROOT / 'desk'))
 EVENTS = ('SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop')
+DEFAULT_DESK_URL = os.environ.get('PROJECT_DESK_URL', 'http://127.0.0.1:7331').rstrip('/')
+HINT_INTERVAL = 300   # seconds between enrollment lookups for one unbound session
+
+
+def desk_url_for(resolution):
+    return (resolution.desk if resolution and resolution.desk else DEFAULT_DESK_URL).rstrip('/')
+
+
+def _fetch_state(desk, project):
+    with urllib.request.urlopen(f'{desk}/api/state?project={urllib.parse.quote(project)}', timeout=1) as response:
+        return json.load(response)
 
 
 def private_write(path, value):
@@ -258,27 +272,48 @@ def bind(thread, source, project, state_root=STATE_ROOT, call=call_desk, agent='
     return bind_credentials(thread, private_read(source), project, state_root, call, agent)
 
 
-def enrollment_hint(payload, agent, state_root):
-    """Tell unbound sessions in a registered project worktree how to opt in.
+def enrollment_hint(payload, agent, state_root, resolve=None, fetch_state=None):
+    """Tell an unbound session in a connected workspace how to join.
 
     Does not infer identity, read another agent's credentials, or register a peer.
+    At most one lookup per session every HINT_INTERVAL seconds, including when it
+    stays silent, so unrelated workspaces pay nothing on every tool call.
     """
     event = payload.get('hook_event_name')
     if event not in EVENTS or event == 'Stop':
         return {}
     thread = payload.get('session_id', '')
-    stamp = binding_path(state_root / 'hints', thread)
-    if stamp.exists() and time.time() - stamp.stat().st_mtime < 300:
-        return {}
-    cwd = Path(payload.get('cwd', '/')).resolve()
     try:
-        with urllib.request.urlopen(f'http://127.0.0.1:7331/api/state?project={PROJECT}', timeout=1) as response:
-            board = json.load(response)
-        if not any(cwd == Path(s['worktree']) or Path(s['worktree']) in cwd.parents for s in board['sessions']):
-            return {}
-    except (OSError, ValueError, KeyError):
+        stamp = binding_path(state_root / 'hints', thread)
+    except ValueError:
+        return {}
+    if stamp.exists() and time.time() - stamp.stat().st_mtime < HINT_INTERVAL:
         return {}
     private_write(stamp, {'hinted_at': time.time()})
+    cwd = Path(payload.get('cwd', '/'))
+    try:
+        declared = (resolve or projects.resolve_project)(cwd)
+    except Exception:
+        declared = None
+    if declared:
+        desk = desk_url_for(declared)
+        context = (f'This workspace belongs to Project Desk project "{declared.project}", but this {agent} '
+                   f'session ({thread}) is not registered and bound yet. Agent onboarding: '
+                   f'{desk}/p/{declared.project}/onboard. If you already registered in this session, reuse '
+                   'that private key; do not register again. Otherwise call register_session without a '
+                   f'project (it resolves from .project-desk.json), then enable_notifications(session_key, '
+                   f'agent_session_id={thread}). Fallback CLI: {DESK_CLI}. Keep keys private. This binds '
+                   'lifecycle inbox delivery, not idle wakeup or automatic task acceptance.')
+        return output_for(event, context, payload)
+    # Undeclared workspace: keep the original hint for worktrees already on the desk.
+    try:
+        board = (fetch_state or _fetch_state)(DEFAULT_DESK_URL, PROJECT)
+        resolved = cwd.resolve()
+        if not any(resolved == Path(s['worktree']) or Path(s['worktree']) in resolved.parents
+                   for s in board['sessions']):
+            return {}
+    except Exception:
+        return {}
     context = (f'Project Desk notification hooks are installed for {agent}, but this actual agent session '
                f'({thread}) is not yet bound. Read {RULES_PATH}. If you already '
                'registered with Project Desk in this session, use that existing private key; do not register again. '
