@@ -45,10 +45,17 @@
         <h2 id="page-title">Keep the next move visible.</h2>
         <p>Ownership, blockers, handoffs, and decisions—without losing the thread.</p>
       </div>
-      <label class="project-switcher">Project<input id="project" value="media-intelligence" spellcheck="false"></label>
+      <div class="project-controls">
+        <label class="project-switcher">Project<select id="project"><option value="media-intelligence">Media Intelligence</option></select></label>
+        <button type="button" id="connect-agents">Connect agents</button>
+        <button type="button" id="project-settings">Project settings</button>
+        <a href="/projects" id="all-projects">All projects</a>
+      </div>
     </section>
 
     <div id="notice" role="status" aria-live="polite"></div>
+    <div id="shared-locks" hidden></div>
+    <section id="projects-overview" hidden aria-label="All projects"></section>
 
     <section class="overview-strip" aria-label="Workload overview">
       <button type="button" data-quick-status="active"><span>Active</span><strong id="metric-active">0</strong><small>open tasks</small></button>

@@ -235,3 +235,13 @@ footer{padding:18px clamp(18px,3.2vw,54px) 28px;font-size:10px;color:#6a7773}
 }
 
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+
+.project-controls{display:flex;flex-wrap:wrap;align-items:end;gap:.5rem}
+.project-switcher select{min-width:16rem}
+#projects-overview h3{margin:0 0 .75rem}
+.project-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(16rem,1fr));gap:.75rem}
+.project-card{display:flex;flex-direction:column;gap:.25rem;padding:.9rem 1rem;border:1px solid #d8dde6;border-radius:10px;text-decoration:none;color:inherit;background:#fff}
+.project-card:hover,.project-card:focus-visible{border-color:#2f6fed}
+.project-card .mono{font-family:ui-monospace,monospace;font-size:.8rem;opacity:.7}
+.project-card small{opacity:.75}
+#shared-locks{margin:.5rem 0;padding:.5rem .75rem;border-radius:8px;background:#fff6e0;font-size:.85rem}

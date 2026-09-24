@@ -10,7 +10,12 @@ const LIST_SIZES={messagePage:8,notePage:6,sessionPage:8,eventPage:12};
 
 const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const time=value=>new Date(value).toLocaleString('en-GB',{timeZone:'Asia/Karachi',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
-const project=()=>$('#project').value.trim()||'media-intelligence';
+const FALLBACK_PROJECT='media-intelligence';
+const LAST_PROJECT_KEY='project-desk:last-project';
+let projects=[],currentProject='';
+const project=()=>currentProject||FALLBACK_PROJECT;
+const pathProject=()=>{const match=location.pathname.match(/^\/p\/([a-z0-9][a-z0-9-]*)\/?$/);return match?match[1]:'';};
+const onOverview=()=>location.pathname==='/projects';
 const taskFor=id=>board?.tasks.find(task=>task.id===id);
 const sessionFor=id=>board?.sessions.find(session=>session.id===id);
 const shortId=id=>id?String(id).slice(-8):'';
@@ -108,6 +113,100 @@ function recipientOptions(value='all',include=''){
   return options;
 }
 
+function rememberProject(slug){try{localStorage.setItem(LAST_PROJECT_KEY,slug);}catch(error){}}
+function storedProject(){try{return localStorage.getItem(LAST_PROJECT_KEY)||'';}catch(error){return '';}}
+function projectLabel(item){
+  const unread=item.unread_human?` · ${item.unread_human} unread`:'';
+  return `${item.name} · ${item.open_tasks} open${unread}`;
+}
+function renderProjectSelect(){
+  const visible=projects.filter(item=>!item.hidden||item.slug===currentProject);
+  $('#project').innerHTML=visible.map(item=>
+    `<option value="${esc(item.slug)}"${item.slug===currentProject?' selected':''}>${esc(projectLabel(item))}</option>`
+  ).join('')+'<option value="__new__">+ New project</option>';
+}
+async function loadProjects(){
+  const response=await fetch('/api/projects');
+  if(!response.ok)throw Error('Cannot list projects');
+  projects=(await response.json()).projects;
+}
+function chooseInitialProject(){
+  const known=slug=>projects.some(item=>item.slug===slug);
+  const fromPath=pathProject();
+  if(fromPath&&!known(fromPath)){
+    $('#notice').textContent=`Unknown project “${fromPath}”. Pick one from the list, or create it with + New project.`;
+  }
+  currentProject=[fromPath,storedProject(),FALLBACK_PROJECT].find(slug=>slug&&known(slug))||projects[0]?.slug||FALLBACK_PROJECT;
+}
+function showBoard(){
+  $('#projects-overview').hidden=true;
+  $('.overview-strip').hidden=false;
+  $('.layout').hidden=false;
+}
+function renderOverview(){
+  $('.overview-strip').hidden=true;
+  $('.layout').hidden=true;
+  const section=$('#projects-overview');
+  section.hidden=false;
+  section.innerHTML='<h3>All projects</h3><div class="project-cards">'+projects.filter(item=>!item.hidden).map(item=>`
+    <a class="project-card" href="/p/${esc(item.slug)}">
+      <strong>${esc(item.name)}</strong><span class="mono">${esc(item.slug)}</span>
+      <span>${item.open_tasks} open · ${item.live_sessions} live agents${item.unread_human?` · ${item.unread_human} unread`:''}</span>
+      <small>${esc((item.repo_roots||[]).join(', ')||'No repo folder recorded')}</small>
+      <small>${item.last_activity?'Last activity '+esc(time(item.last_activity)):'No activity yet'}</small>
+    </a>`).join('')+'</div>';
+}
+function switchProject(slug){
+  currentProject=slug;rememberProject(slug);
+  history.pushState({},'',`/p/${slug}`);
+  Object.assign(ui,{taskPage:1,messagePage:1,notePage:1,sessionPage:1,eventPage:1});
+  taskDetailState.clear();notificationProject='';
+  showBoard();renderProjectSelect();refresh();
+}
+function renderSharedLocks(){
+  const box=$('#shared-locks'),locks=board?.shared_locks||[];
+  box.hidden=!locks.length;
+  box.textContent=locks.length?'Shared locks held in other projects: '+locks.map(lock=>`${lock.resource} (${lock.project}, ${shortId(lock.task_id)})`).join(' · '):'';
+}
+function openNewProject(){
+  openEditor('New project',
+    field('Name','name')+field('Short name (lowercase, dashes)','slug')+
+    field('Repo folders (one absolute path per line)','repo_roots','textarea','',[],false),
+    async data=>{
+      const slug=(data.slug||data.name).trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+      const roots=(data.repo_roots||'').split('\n').map(line=>line.trim()).filter(Boolean);
+      await mutate('project.create',{slug,name:data.name.trim(),repo_roots:roots});
+      await loadProjects();
+      switchProject(slug);
+      setTimeout(()=>openConnect(slug),0);
+    },'Create project');
+}
+async function openConnect(slug=project()){
+  const response=await fetch(`/api/projects/${encodeURIComponent(slug)}/connect`);
+  const info=await response.json();
+  if(!response.ok){$('#notice').textContent=info.error||'Cannot load connection details';return;}
+  const readonly=(label,value)=>`<label>${esc(label)}<textarea readonly rows="2">${esc(value)}</textarea></label>`;
+  openEditor(`Connect agents · ${info.name}`,
+    readonly('Paste into Claude or Codex, in this repo',info.paste_line)+
+    readonly('Or run in the repo folder',info.join_command)+
+    `<p><a href="${esc(info.kit_url)}">Download the setup kit (zip)</a> · <a href="${esc(info.onboard_url)}" target="_blank" rel="noopener">Open the agent instructions</a></p>`,
+    async()=>{},'Done');
+}
+function openProjectSettings(){
+  const item=projects.find(entry=>entry.slug===project());
+  if(!item)return;
+  openEditor(`Project settings · ${item.name}`,
+    field('Name','name','text',item.name)+
+    field('Repo folders (one absolute path per line)','repo_roots','textarea',(item.repo_roots||[]).join('\n'),[],false)+
+    field('Rules file (optional absolute path)','rules_path','text',item.rules_path||'',[],false),
+    async data=>{
+      await mutate('project.update',{slug:item.slug,name:data.name.trim(),
+        repo_roots:(data.repo_roots||'').split('\n').map(line=>line.trim()).filter(Boolean),
+        rules_path:(data.rules_path||'').trim()});
+      await loadProjects();renderProjectSelect();
+    });
+}
+
 async function refresh(){
   try{
     const response=await fetch('/api/state?project='+encodeURIComponent(project()));
@@ -132,10 +231,11 @@ function field(label,key,type='text',value='',options=[],isRequired=true){
   return `<label>${esc(label)}<input name="${esc(key)}" value="${esc(value)}"${required}></label>`;
 }
 
-function openEditor(title,fieldsHtml,action){
+function openEditor(title,fieldsHtml,action,saveLabel='Save'){
   $('#editor-title').textContent=title;
   $('#editor-fields').innerHTML=fieldsHtml;
   $('#form-error').textContent='';
+  $('#save').textContent=saveLabel;
   dialogAction=action;
   $('#editor').showModal();
   $('#editor-fields input, #editor-fields textarea, #editor-fields select')?.focus();
@@ -310,6 +410,7 @@ function renderEvents(){
 }
 
 function render(){
+  renderSharedLocks();
   updateOwnerFilter();
   renderMetrics();
   renderTasks();
@@ -439,7 +540,13 @@ $('#mark-seen').onclick=()=>{
 
 function resetTaskPage(){ui.taskPage=1;if(board){renderMetrics();renderTasks();}}
 $('#refresh').onclick=refresh;
-$('#project').addEventListener('change',()=>{Object.assign(ui,{taskPage:1,messagePage:1,notePage:1,sessionPage:1,eventPage:1});taskDetailState.clear();notificationProject='';refresh();});
+$('#project').addEventListener('change',event=>{
+  const value=event.target.value;
+  if(value==='__new__'){renderProjectSelect();openNewProject();return;}
+  switchProject(value);
+});
+$('#connect-agents').onclick=()=>openConnect();
+$('#project-settings').onclick=openProjectSettings;
 $('#status-filter').onchange=resetTaskPage;
 $('#owner-filter').onchange=resetTaskPage;
 $('#priority-filter').onchange=resetTaskPage;
@@ -447,5 +554,14 @@ $('#sort-tasks').onchange=resetTaskPage;
 $('#task-page-size').onchange=resetTaskPage;
 $('#search').oninput=resetTaskPage;
 
-refresh();
+async function boot(){
+  try{await loadProjects();}
+  catch(error){projects=[{slug:FALLBACK_PROJECT,name:'Media Intelligence',open_tasks:0,unread_human:0,live_sessions:0,hidden:false,repo_roots:[]}];}
+  chooseInitialProject();renderProjectSelect();
+  if(onOverview())renderOverview();else showBoard();
+  refresh();
+}
+boot();
+setInterval(()=>{if(!document.hidden)loadProjects().then(()=>{renderProjectSelect();if(onOverview())renderOverview();}).catch(()=>{});},30000);
+window.addEventListener('popstate',()=>{chooseInitialProject();renderProjectSelect();if(onOverview())renderOverview();else showBoard();refresh();});
 setInterval(()=>{if(!document.hidden&&!$('#editor').open)refresh();},3000);
