@@ -22,7 +22,7 @@ def main(argv=None):
     move = sub.add_parser('move')
     move.add_argument('--from', dest='source', required=True)
     move.add_argument('--to', dest='target', required=True)
-    move.add_argument('--worktree-prefix', required=True)
+    move.add_argument('--worktree-prefix', action='append', required=True)
     move.add_argument('--idle-hours', type=float, default=6)
     move.add_argument('--export', default='')
     move.add_argument('--apply', action='store_true')

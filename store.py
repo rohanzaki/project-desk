@@ -280,21 +280,32 @@ class Store:
     def move_project(self, source, target, worktree_prefix, apply=False, idle_hours=6, export_path=''):
         """Move a repo's records between projects. Dry run unless apply=True.
 
-        Only sessions under worktree_prefix and idle for idle_hours move, with the
-        tasks they own and those tasks' claims, messages, notes and handoff briefs.
-        Live sessions stay put: their hook binding records the old project.
-        Events stay as history. All-or-nothing.
+        Only sessions under worktree_prefix (a path, or a list of paths — a
+        prefix matches a worktree that equals it or sits under it as a whole
+        path segment, never an unrelated sibling like Shop-App-Reports)
+        and idle for idle_hours move, with the tasks they own and those tasks'
+        claims, messages, notes and handoff briefs. Live sessions stay put:
+        their hook binding records the old project. Events stay as history.
+        All-or-nothing.
         """
         if not (valid_slug(source) and valid_slug(target)) or source == target:
             raise ValueError('Name two different project slugs')
-        prefix = text(worktree_prefix, 'worktree prefix', 1000)
-        if not Path(prefix).is_absolute():
-            raise ValueError('Worktree prefix must be an absolute path')
+        values = [worktree_prefix] if isinstance(worktree_prefix, str) else list(worktree_prefix)
+        if not values:
+            raise ValueError('Name at least one worktree prefix')
+        prefixes = []
+        for value in values:
+            if isinstance(value, str):
+                value = value.rstrip('/')
+            value = text(value, 'worktree prefix', 1000)
+            if not Path(value).is_absolute():
+                raise ValueError('Worktree prefix must be an absolute path')
+            prefixes.append(value)
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=idle_hours)).isoformat()
         with self.connection(True) as c:
             under = [dict(r) for r in c.execute(
                 'SELECT id,name,worktree,last_seen FROM sessions WHERE project=?', (source,))
-                if r['worktree'].startswith(prefix)]
+                if any(r['worktree'] == p or r['worktree'].startswith(p + '/') for p in prefixes)]
             moving = [s for s in under if s['last_seen'] <= cutoff]
             live = [s for s in under if s['last_seen'] > cutoff]
             ids = [s['id'] for s in moving]
@@ -327,19 +338,21 @@ class Store:
             if not apply or not ids:
                 return report
             self._ensure_project(c, target)
-            for table, key, values in (('sessions', 'id', ids), ('tasks', 'id', task_ids),
-                                       ('claims', 'task_id', task_ids), ('messages', 'id', message_ids),
-                                       ('notes', 'id', note_ids), ('handoff_briefs', 'id', brief_ids)):
-                if values:
-                    c.execute(f"UPDATE {table} SET project=? WHERE {key} IN ({','.join('?' * len(values))})",
-                              (target, *values))
+            for table, key, ids_for_table in (('sessions', 'id', ids), ('tasks', 'id', task_ids),
+                                              ('claims', 'task_id', task_ids), ('messages', 'id', message_ids),
+                                              ('notes', 'id', note_ids), ('handoff_briefs', 'id', brief_ids)):
+                if ids_for_table:
+                    c.execute(f"UPDATE {table} SET project=? WHERE {key} IN ({','.join('?' * len(ids_for_table))})",
+                              (target, *ids_for_table))
+            joined_prefixes = ', '.join(prefixes)
             summary = (f"Moved {len(ids)} sessions and {len(task_ids)} tasks here from '{source}' "
-                       f"(worktrees under {prefix}), with {len(message_ids)} messages and {len(note_ids)} notes."
+                       f"(worktrees under {joined_prefixes}), with {len(message_ids)} messages and {len(note_ids)} notes."
                        + (f' Export of the originals: {export_path}' if export_path else ''))
             self._note(c, target, 'project-desk', summary, 'note')
             for project in (source, target):
                 self.event(c, project, 'project-desk', 'project.moved',
-                           {'from': source, 'to': target, 'sessions': ids, 'tasks': task_ids})
+                           {'from': source, 'to': target, 'sessions': ids, 'tasks': task_ids,
+                            'worktree_prefixes': joined_prefixes})
             return report
 
     def auth(self, c, key):
