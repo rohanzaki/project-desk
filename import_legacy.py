@@ -6,11 +6,16 @@ not part of the general tool — new installations do not need it."""
 import argparse
 import hashlib
 import json
+import os
 import re
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from store import Store, scopes, now
+
+# Worktree recorded for legacy rows whose report names none. Set it to your main
+# checkout before importing; the default is only a placeholder.
+LEGACY_WORKTREE = os.environ.get('PROJECT_DESK_LEGACY_WORKTREE', '/')
 
 
 def import_roster(store,source,archive):
@@ -30,7 +35,7 @@ def import_roster(store,source,archive):
             kind='claude' if 'Claude' in label else 'codex'
             codes=re.findall(r'`([^`]+)`',location)
             branch=next((v for v in codes if not v.startswith('/')),'legacy-report')
-            worktree=next((v for v in codes if v.startswith('/')),'/path/to/Windows/Application_Node_Js/media_inteligence')
+            worktree=next((v for v in codes if v.startswith('/')),LEGACY_WORKTREE)
             resources=re.findall(r'`([^`]+)`',owned)
             resources=scopes(resources) if resources else ['service:legacy-'+label.split('/')[0].strip()]
             match=re.search(r'\d{4}-\d\d-\d\d \d\d:\d\d',state)
