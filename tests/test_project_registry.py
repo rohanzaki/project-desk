@@ -1,3 +1,5 @@
+import sqlite3
+
 import pytest
 
 from store import Store, Conflict
@@ -58,6 +60,23 @@ def test_update_project(tmp_path):
         d.update_project('nope', name='x')
     with pytest.raises(ValueError):
         d.update_project('xyz', rules_path='relative.md')
+
+
+def test_list_projects_takes_no_write_lock_in_the_steady_state(tmp_path):
+    db = tmp_path / 'd.sqlite3'
+    d = Store(db)
+    d.register('a', 'codex', 'shop-app', 'b', '/tmp/x')
+    first = d.list_projects()  # syncs 'shop-app' into the projects table once
+    assert any(p['slug'] == 'shop-app' for p in first)
+
+    blocker = sqlite3.connect(db, timeout=0.1)
+    blocker.execute('BEGIN IMMEDIATE')          # holds SQLite's one writer slot
+    try:
+        items = d.list_projects()                # must not need a write lock to proceed
+    finally:
+        blocker.rollback()
+        blocker.close()
+    assert any(p['slug'] == 'shop-app' for p in items)
 
 
 def test_snapshot_shows_other_projects_service_locks(tmp_path):

@@ -135,10 +135,7 @@ class Store:
                     rules_path TEXT NOT NULL DEFAULT '', archived INTEGER NOT NULL DEFAULT 0,
                     created TEXT NOT NULL);
             ''')
-            # Every project already in use gets a row, so the dropdown lists it.
-            existing = [r[0] for r in c.execute('SELECT project FROM tasks UNION SELECT project FROM sessions')]
-            c.executemany('INSERT OR IGNORE INTO projects(slug,name,created) VALUES(?,?,?)',
-                          [(slug, display_name(slug), now()) for slug in existing])
+            self._sync_registry(c)
         self.path.chmod(0o600)
 
     @contextmanager
@@ -184,6 +181,19 @@ class Store:
         c.execute('INSERT OR IGNORE INTO projects(slug,name,created) VALUES(?,?,?)',
                   (slug, display_name(slug), now()))
 
+    def _sync_registry(self, c):
+        """Give every project slug already referenced by tasks or sessions a
+        row, so the listing (and the dropdown it feeds) never misses one.
+
+        The single copy of this backfill logic: __init__ calls it once at
+        open time, and list_projects calls it (only when needed — see there)
+        to catch a slug that started being used after the Store was opened.
+        Takes a write connection; callers decide when that is warranted.
+        """
+        existing = [r[0] for r in c.execute('SELECT project FROM tasks UNION SELECT project FROM sessions')]
+        c.executemany('INSERT OR IGNORE INTO projects(slug,name,created) VALUES(?,?,?)',
+                      [(slug, display_name(slug), now()) for slug in existing])
+
     def registry(self, c):
         return {r['slug']: json.loads(r['repo_roots'])
                 for r in c.execute('SELECT slug, repo_roots FROM projects WHERE archived=0')}
@@ -197,13 +207,22 @@ class Store:
 
     def list_projects(self):
         cutoff = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
-        with self.connection(True) as c:
-            # A session or task can name a project between constructions of this
-            # Store (the one-shot __init__ backfill only sees what existed at
-            # open time), so re-sync here too — otherwise a project in active
-            # use would be invisible until the process restarts.
-            for row in c.execute('SELECT project FROM tasks UNION SELECT project FROM sessions'):
-                self._ensure_project(c, row[0])
+        # A session or task can name a project between constructions of this
+        # Store (the one-shot __init__ backfill only sees what existed at open
+        # time), so this must still catch up on a slug used since then —
+        # but a listing is polled constantly by every live session, and
+        # BEGIN IMMEDIATE on every call would hold SQLite's one writer slot
+        # and stall register/claim/message/ack for the whole fleet even when
+        # nothing needs inserting. So: check on a plain read connection first,
+        # and only pay for a write transaction on the rare call that finds a
+        # gap to fill.
+        with self.connection() as c:
+            missing = c.execute('''SELECT project FROM tasks UNION SELECT project FROM sessions
+                                    EXCEPT SELECT slug FROM projects''').fetchall()
+        if missing:
+            with self.connection(True) as c:
+                self._sync_registry(c)
+        with self.connection() as c:
             out = []
             for row in c.execute('SELECT * FROM projects ORDER BY archived, name').fetchall():
                 slug, item = row['slug'], self._project_row(row)
