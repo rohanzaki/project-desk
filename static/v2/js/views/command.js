@@ -3,9 +3,9 @@ import {Desk} from '../context.js';
 import {Seg, Btn} from '../ui.js';
 import {Who, Av, whoFor, taskOf, ago, hm, when, firstLine, snoozeTimes, HUMAN} from '../util.js';
 
-const KINDS = [['all', 'All'], ['approval', 'Approvals'], ['question', 'Questions'], ['blocked', 'Blocked on you'],
+const KINDS = [['all', 'All'], ['approval', 'Approvals'], ['question', 'Questions'], ['blocked', 'Blocked on you'], ['desk_request', 'Desk requests'],
   ['stale', 'Stale'], ['refused', 'Refused'], ['action', 'Action points']];
-const TYPE = {approval: 'Approval', question: 'Question', blocked: 'Blocked on you', stale: 'Stale claim', refused: 'Refused claim', action: 'Action points'};
+const TYPE = {approval: 'Approval', question: 'Question', blocked: 'Blocked on you', stale: 'Stale claim', refused: 'Refused claim', action: 'Action points', desk_request: 'Desk request'};
 
 // Buttons per kind. Numbers are the 1–9 shortcut keys; E ticks, S snoozes.
 export function itemActions(ctx, item) {
@@ -28,6 +28,10 @@ export function itemActions(ctx, item) {
     out.push({label: 'Queue it', run: () => A.refusal(item, 'queue')});
     out.push({label: 'Ask handoff', run: () => A.refusal(item, 'handoff')});
     out.push({label: 'Dismiss', run: () => A.refusal(item, 'dismiss')});
+  } else if (item.kind === 'desk_request') {
+    out.push({label: 'Approve', kind: 'p', run: () => A.approveRequest(item)});
+    out.push({label: 'Approve with note…', run: () => A.approveRequest(item, true)});
+    out.push({label: 'Reject…', kind: 'd', run: () => A.rejectRequest(item)});
   } else if (item.kind === 'action') {
     const ids = item.item_ids || [];
     out.push({label: ids.length > 1 ? 'Tick all' : 'Tick', key: 'E', run: () => A.tick(item.project, ids, 'done')});

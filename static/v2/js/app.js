@@ -9,6 +9,7 @@ import {Ledger} from './views/ledger.js';
 import {TaskPane} from './views/pane.js';
 import {Inbox, ActionPoints, Notes, Lessons, Activity} from './views/lists.js';
 import {Claims, Lanes, Projects} from './views/ops.js';
+import {DeskRequests} from './views/requests.js';
 import {HUMAN, store, LAST_PROJECT_KEY, pinKey, lookedKey, notifyKey, indexBoard, taskOf, whoFor, firstLine, when, ago} from './util.js';
 
 const BOARD_MS = 4000, ATTENTION_MS = 8000, PROJECTS_MS = 30000;
@@ -35,7 +36,7 @@ function localAttention(b, project) {
   for (const i of b.action_items || []) if (i.status === 'open' && i.assignee === HUMAN) { const k = i.task_id || ''; if (!byTask.has(k)) byTask.set(k, []); byTask.get(k).push(i); }
   for (const [k, list] of byTask) items.push({key: `action:${project}:${k || 'none'}`, project, kind: 'action', item_ids: list.map(i => i.id), task_id: k || null, task_title: list[0].task_title,
     title: list.map(i => i.body).join(' · '), meta: `${list.length} left for you on ${list[0].task_title || 'no task'}`, who: {id: list[0].author, name: list[0].author_name}, created: list[0].created});
-  const order = {approval: 0, question: 1, blocked: 2, stale: 3, refused: 4, action: 5};
+  const order = {approval: 0, question: 1, desk_request: 2, blocked: 3, stale: 4, refused: 5, action: 6};
   return items.sort((x, y) => order[x.kind] - order[y.kind] || String(y.created).localeCompare(String(x.created)));
 }
 
@@ -217,10 +218,10 @@ function App() {
   const aiN = (b.action_items || []).filter(i => i.status === 'open' && i.assignee === HUMAN).length;
   const heldN = (b.tasks || []).filter(t => t.status !== 'DONE').reduce((n, t) => n + t.resources.length, 0);
   const liveN = (b.sessions || []).filter(s => !s.stale && !s.imported).length;
-  const counts = {command: att.items.length, tasks: openN, actions: aiN || '', inbox: unread || '', claims: heldN, lanes: liveN, lessons: (b.lessons || []).length, projects: projects.filter(p => !p.archived).length};
+  const counts = {command: att.items.length, tasks: openN, actions: aiN || '', inbox: unread || '', claims: heldN, lanes: liveN, lessons: (b.lessons || []).length, projects: projects.filter(p => !p.archived).length, requests: att.items.filter(i => i.kind === 'desk_request').length || ''};
   const views = {command: () => html`<${SinceStrip} /><${NeedsYou} /><${OnDesk} /><${Ledger} mode="command" />`, tasks: () => html`<${Ledger} mode="tasks" />`,
     actions: () => html`<${ActionPoints} />`, inbox: () => html`<${Inbox} />`, notes: () => html`<${Notes} />`, claims: () => html`<${Claims} />`,
-    lanes: () => html`<${Lanes} />`, lessons: () => html`<${Lessons} />`, activity: () => html`<${Activity} />`, projects: () => html`<${Projects} />`};
+    lanes: () => html`<${Lanes} />`, lessons: () => html`<${Lessons} />`, requests: () => html`<${DeskRequests} />`, activity: () => html`<${Activity} />`, projects: () => html`<${Projects} />`};
   const showPane = paneView && (paneColumn || paneOpen);
   return html`<${Desk.Provider} value=${ctx}>
     <div class="shell">
@@ -268,7 +269,7 @@ function Top({ctx, live, projects, project, setProject, openPalette, phone, onMe
 }
 
 const NAV = [['command', 'Command center'], ['tasks', 'Tasks'], ['actions', 'Action points'], ['inbox', 'Inbox'], ['notes', 'Decisions & notes'],
-  ['claims', 'Claims & locks'], ['lanes', 'Agent lanes'], ['lessons', 'Lessons'], ['activity', 'Activity'], ['projects', 'Projects']];
+  ['claims', 'Claims & locks'], ['lanes', 'Agent lanes'], ['lessons', 'Lessons'], ['activity', 'Activity'], ['requests', 'Desk requests'], ['projects', 'Projects']];
 
 function Nav({ctx, view, go, counts, projects, project, setProject, open, notify, toggleNotify}) {
   const b = ctx.board;

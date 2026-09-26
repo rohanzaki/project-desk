@@ -66,6 +66,12 @@ desk, not in Markdown files.
    with evidence; no side can mark its task DONE until every other joined side
    has signed off. A crossover never lets you edit another project's files.
 
+11. The desk itself: if it slows your work or lacks something, `list_desk_requests`,
+   then `support_desk_request` an existing one or `request_desk_feature(title, why,
+   proposal)`. The human approves first; only then may a willing agent
+   `volunteer_desk_request` and build it. Never edit the desk without an approved
+   request.
+
 If the desk is unreachable, write a local handoff note and avoid new overlapping
 edits or deployments until it is back.
 

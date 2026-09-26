@@ -166,6 +166,8 @@ select.input{max-width:220px;padding-right:6px}
 .k-stale{color:var(--red)}.k-stale .sq{background:var(--red)}
 .k-refused{color:var(--amber-fg)}.k-refused .sq{background:var(--amber-fg)}
 .k-action{color:var(--sage)}.k-action .sq{background:var(--sage)}
+.k-desk_request{color:var(--blue-fg)}.k-desk_request .sq{background:var(--blue)}
+.dr-proposed{background:var(--amber-soft);color:var(--amber-fg)}.dr-approved{background:var(--blue-soft);color:var(--blue-fg)}.dr-in_progress{background:var(--blue-soft);color:var(--blue-fg)}.dr-done{background:var(--sage-soft);color:var(--sage-fg)}.dr-rejected,.dr-withdrawn{background:#ece8de;color:var(--mute)}
 .k-blocked{color:#8a5619}.k-blocked .sq{background:var(--amber)}
 .att-main{min-width:0;display:flex;flex-direction:column;gap:3px}
 .att-title{font-size:13px;font-weight:600;color:var(--ink2);text-wrap:pretty;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}

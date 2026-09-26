@@ -4,7 +4,7 @@ import * as api from './api.js';
 import {whoFor, taskOf, firstLine} from './util.js';
 
 export const VIEWS = [['command', 'Command center'], ['tasks', 'Tasks'], ['actions', 'Action points'], ['inbox', 'Inbox'],
-  ['notes', 'Decisions & notes'], ['claims', 'Claims & locks'], ['lanes', 'Agent lanes'], ['lessons', 'Lessons'], ['activity', 'Activity'], ['projects', 'Projects']];
+  ['notes', 'Decisions & notes'], ['claims', 'Claims & locks'], ['lanes', 'Agent lanes'], ['lessons', 'Lessons'], ['activity', 'Activity'], ['requests', 'Desk requests'], ['projects', 'Projects']];
 
 export function Palette({onClose}) {
   const ctx = useContext(Desk);

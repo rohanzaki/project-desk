@@ -105,6 +105,21 @@ export function makeActions(ctx) {
       kind === 'queue' ? 'Queued: it gets YOUR TURN when the path frees.' : kind === 'handoff' ? 'Handoff request sent to the holder.' : 'Dismissed.'),
     snooze: (item, until) => act(item.project, 'snooze.set', {key: item.key, until: until.toISOString()}, `Snoozed until ${until.toLocaleString('en-GB', {weekday: 'short', hour: '2-digit', minute: '2-digit'})}.`),
 
+    // ---- desk feature requests (agents ask, the human approves, a volunteer builds)
+    approveRequest: (r, withNote) => {
+      const item = {project: r.project || r.origin_project, request_id: r.request_id || r.id, title: r.title};
+      if (!withNote) return act(item.project, 'desk_request.approve', {request_id: item.request_id}, 'Approved. Every project is told; the first willing agent takes it.');
+      return dialog({title: 'Approve desk request', save: 'Approve', hint: item.title,
+        fields: [{key: 'note', label: 'Note for whoever builds it (scope, limits)', type: 'area'}],
+        onSubmit: f => act(item.project, 'desk_request.approve', {request_id: item.request_id, note: f.note}, 'Approved with your note.')});
+    },
+    rejectRequest: r => {
+      const item = {project: r.project || r.origin_project, request_id: r.request_id || r.id, title: r.title};
+      return dialog({title: 'Not approved', save: 'Send', hint: item.title,
+        fields: [{key: 'note', label: 'Why (the agent that asked is told)', type: 'area', optional: true}],
+        onSubmit: f => act(item.project, 'desk_request.reject', {request_id: item.request_id, note: f.note || ''}, 'Rejected; the asker is told.')});
+    },
+
     // ---- action points
     tick: (proj, ids, status = 'done') => ids.length === 1
       ? act(proj, 'action.resolve', {item_id: ids[0], status}, status === 'open' ? 'Restored.' : 'Ticked.')

@@ -100,6 +100,10 @@ your task too: `update_task(action_items=[...])` is the task's whole list (it
 replaces the earlier one; `[]` clears it), `add_action_items(task_id=...)` adds
 to it. They become checkboxes on the dashboard, grouped by task.
 
+- Desk slowing you down or missing a feature? `request_desk_feature(title, why,
+  proposal)` (or support an existing one). Build desk changes only via
+  `volunteer_desk_request` after Rohan approves.
+
 ## Existing build and production rules still apply
 
 Use Linux worktrees. Respect existing ownership and pauses. Read the local working
