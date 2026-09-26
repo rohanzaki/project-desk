@@ -651,7 +651,7 @@ class FeaturesMixin:
         service = text(service, 'service', 100)
         service = service[len('service:'):] if service.startswith('service:') else service
         if not re.fullmatch(r'[a-zA-Z0-9_.:-]+', service):
-            raise ValueError('Name the service like cmu, mintel-app or insightwatch-mcp')
+            raise ValueError('Name the service like web, api or worker')
         deploy_id = ident('d-')
         c.execute('INSERT INTO deploys VALUES(?,?,?,?,?,?,?,?)',
                   (deploy_id, project, service, text(commit_ref, 'commit', 200), (summary or '')[:1000],

@@ -76,7 +76,7 @@ def test_claim_and_would_conflict_hand_over_the_lessons_for_those_paths(desk):
     assert [l['id'] for l in planned['lessons']] == [narrow['id'], broad['id']]
     task = d.claim(b['session_key'], 'Finance screen', ['src/app/finance/v2'], 'Build')
     assert [l['id'] for l in task['lessons']] == [narrow['id'], broad['id']]
-    assert [l['id'] for l in d.claim(b['session_key'], 'Deploy lane', ['service:cmu'], 'x')['lessons']] == []
+    assert [l['id'] for l in d.claim(b['session_key'], 'Deploy lane', ['service:api'], 'x')['lessons']] == []
 
 
 def test_global_lessons_cross_projects_and_project_lessons_do_not(desk, tmp_path):
@@ -107,7 +107,7 @@ def test_the_journal_records_the_life_of_a_task(desk):
     d.update(a['session_key'], t['id'], t['version'], 'BLOCKED', 'Waiting on the partner schema')
     journal = d.get_task_context(b['session_key'], t['id'])['journal']
     assert [e['kind'] for e in journal] == ['claimed', 'progress', 'blocked']
-    assert 'Urdu dates' in journal[1]['entry'] and journal[1]['author_name'] == 'alpha api agent'
+    assert 'local-format dates' in journal[1]['entry'] and journal[1]['author_name'] == 'alpha api agent'
     events = d.check_in(a['session_key'], include=['events'])['events']
     assert any(e['kind'] == 'journal.logged' for e in events)
     assert d.snapshot('alpha')['task_logs'][t['id']][-1]['kind'] == 'blocked'
@@ -166,13 +166,13 @@ def test_resume_rules(desk, tmp_path):
 
 def test_digest_puts_mail_for_you_first_and_names_kinds(desk):
     d, a, b, _ = desk
-    d.message(b['session_key'], 'all', 'DEPLOY STARTING 08:14 PKT (s-x): SynthBot round 8.\nPlease hold.')
+    d.message(b['session_key'], 'all', 'DEPLOY STARTING 08:14 (s-x): release 8.\nPlease hold.')
     d.message(b['session_key'], 'all', 'HEADS-UP: the desk restarts in 10 min.')
     direct = d.message(b['session_key'], a['session_id'], 'Can you review src/api before I merge?')
     digest = d.check_in(a['session_key'], include=['inbox_digest'])['inbox_digest']
     assert digest[0]['id'] == direct['message_id'] and digest[0]['to'] == 'you'
     assert [m['kind'] for m in digest[1:]] == ['deploy', 'fyi']
-    assert digest[1]['first_line'] == 'DEPLOY STARTING 08:14 PKT (s-x): SynthBot round 8.'
+    assert digest[1]['first_line'] == 'DEPLOY STARTING 08:14 (s-x): release 8.'
     counts = d.check_in(a['session_key'], include=['counts'])['counts']
     assert (counts['unread_messages'], counts['unread_direct'], counts['unread_broadcast']) == (3, 1, 2)
 
@@ -262,13 +262,13 @@ def test_approval_round_trip(desk, tmp_path):
 def test_wait_state_sees_messages_answers_decisions_resources_crossovers(desk):
     d, a, b, _ = desk
     session = d.wait_session(a['session_key'])
-    held = d.claim(b['session_key'], 'Deploy', ['service:cmu-deploy'], 'deploying')
-    before = d.wait_state(session, ['service:cmu-deploy'])
-    assert before['holders'] == {'service:cmu-deploy': [held['id']]}
+    held = d.claim(b['session_key'], 'Deploy', ['service:app-deploy'], 'deploying')
+    before = d.wait_state(session, ['service:app-deploy'])
+    assert before['holders'] == {'service:app-deploy': [held['id']]}
     d.message(b['session_key'], a['session_id'], 'done soon')
     held = fresh(d, held)
     d.update(b['session_key'], held['id'], held['version'], 'DONE', 'x', 'deployed', 'ok')
-    changes = d.wait_changes(before, d.wait_state(session, ['service:cmu-deploy']))
+    changes = d.wait_changes(before, d.wait_state(session, ['service:app-deploy']))
     kinds = {c['kind'] for c in changes}
     assert kinds == {'message', 'resource'}
     assert next(c for c in changes if c['kind'] == 'resource')['free'] is True
@@ -312,15 +312,15 @@ def test_wait_for_over_mcp(tmp_path, monkeypatch):
 
 def test_queue_hands_the_lane_to_the_next_in_line(desk):
     d, a, b, _ = desk
-    held = d.claim(a['session_key'], 'CMU deploy', ['service:cmu-deploy'], 'deploying')
-    queued = d.queue_for(b['session_key'], 'service:cmu-deploy', 'Logistics release')
+    held = d.claim(a['session_key'], 'App deploy', ['service:app-deploy'], 'deploying')
+    queued = d.queue_for(b['session_key'], 'service:app-deploy', 'Release B')
     assert queued['position'] == 1 and queued['free_now'] is False and queued['held_by'][0]['task_id'] == held['id']
-    assert d.would_conflict(b['session_key'], ['service:cmu-deploy'])['queues']['service:cmu-deploy'][0]['session_id'] == b['session_id']
+    assert d.would_conflict(b['session_key'], ['service:app-deploy'])['queues']['service:app-deploy'][0]['session_id'] == b['session_id']
     held = fresh(d, held)
     d.update(a['session_key'], held['id'], held['version'], 'DONE', 'x', 'deployed', 'ok')
     turn = [m for m in inbox(d, b) if m['body'].startswith('YOUR TURN')]
     assert turn and turn[0]['kind'] == 'queue' and turn[0]['sender'] == 'project-desk'
-    d.claim(b['session_key'], 'Logistics deploy', ['service:cmu-deploy'], 'deploying')
+    d.claim(b['session_key'], 'Release B deploy', ['service:app-deploy'], 'deploying')
     assert d.check_in(b['session_key'], include=['queues'])['queues'] == []
 
 
@@ -342,17 +342,17 @@ def test_a_lapsed_turn_passes_to_the_next(desk, tmp_path):
 
 def test_deploys_are_recorded_and_prod_state_reports_them(desk):
     d, a, b, _ = desk
-    t = d.claim(a['session_key'], 'SynthBot round 9', ['service:cmu', 'src/lib/synthbot'], 'deploy')
+    t = d.claim(a['session_key'], 'Release 9', ['service:api', 'src/lib/bot'], 'deploy')
     t = fresh(d, t)
-    d.update(a['session_key'], t['id'], t['version'], 'DONE', 'x', 'shipped round 9', 'login 200',
+    d.update(a['session_key'], t['id'], t['version'], 'DONE', 'x', 'shipped release 9', 'login 200',
              commit_ref='87f2c9c9', deployment='deployed')
-    d.record_deploy(b['session_key'], 'insightwatch-mcp', 'a05b9f74', 'MCP 49 tools')
-    prod = d.prod_state(b['session_key'], 'cmu')
+    d.record_deploy(b['session_key'], 'worker', 'a05b9f74', 'worker 49 jobs')
+    prod = d.prod_state(b['session_key'], 'api')
     services = {s['service']: s for s in prod['services']}
-    assert services['cmu']['commit_ref'] == '87f2c9c9' and services['cmu']['by'] == 'alpha api agent'
-    assert services['insightwatch-mcp']['commit_ref'] == 'a05b9f74'
-    assert prod['history'][0]['summary'] == 'shipped round 9'
-    assert {p['service'] for p in d.snapshot('alpha')['prod']} == {'cmu', 'insightwatch-mcp'}
+    assert services['api']['commit_ref'] == '87f2c9c9' and services['api']['by'] == 'alpha api agent'
+    assert services['worker']['commit_ref'] == 'a05b9f74'
+    assert prod['history'][0]['summary'] == 'shipped release 9'
+    assert {p['service'] for p in d.snapshot('alpha')['prod']} == {'api', 'worker'}
 
 
 # ---------- 8. crossover contracts ----------
