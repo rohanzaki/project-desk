@@ -490,3 +490,23 @@ def test_hook_line_tags_the_kind(desk):
     state = {'session_id': a['session_id'], 'project': 'alpha', 'agent': 'claude'}
     lines, _ = collect(state, d.check_in(a['session_key']), initial=True)
     assert any(l.startswith('UNACKNOWLEDGED MESSAGE') and '[question]' in l for l in lines)
+
+
+def test_kind_inference_reads_the_shouted_opening():
+    from desk_features import infer_kind
+    assert infer_kind('CROSSOVER INVITE x-8bcbfc4c74f7 from project partner: ...') == 'crossover'
+    assert infer_kind('DEPLOY STARTING 10:59 PKT (s-x): release') == 'deploy'
+    assert infer_kind('MIGRATION ANNOUNCEMENT (migration protocol): x') == 'deploy'
+    assert infer_kind('HEADS-UP: restart soon') == 'fyi'
+    assert infer_kind('Deploy is done, thanks') == 'message'
+    assert infer_kind('A quick question about src/api') == 'message'
+    assert infer_kind('') == 'message'
+
+
+def test_crossover_thread_messages_are_kind_crossover(desk, tmp_path):
+    d, a, b, _ = desk
+    other = d.register('beta', 'claude', '', 'main', declared(tmp_path, 'beta'))
+    t = d.claim(a['session_key'], 'API', ['src/api'], 'x')
+    x = d.start_crossover(a['session_key'], t['id'], [other['session_id']])
+    invite = [m for m in inbox(d, other) if x['id'] in m['body']][0]
+    assert invite['kind'] == 'crossover'

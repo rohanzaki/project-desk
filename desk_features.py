@@ -76,7 +76,8 @@ QUEUE_TURN_MINUTES = 15       # the head of a queue has this long to claim befor
 STALE_HOURS = 6
 EVIDENCE_FIELDS = ('command', 'exit_code', 'tests_passed', 'tests_failed', 'commit', 'output')
 
-_HEADER = re.compile(r'\s*([A-Z][A-Z0-9 /&+\-]{2,60}?)\s*[:(]')
+# The SHOUTED words a message opens with ("DEPLOY DONE 10:03", "CROSSOVER INVITE x-…").
+_HEADER = re.compile(r'\s*((?:[A-Z][A-Z0-9/&+\-]+)(?:[ ]+[A-Z][A-Z0-9/&+\-]+)*)')
 
 
 def infer_kind(body):

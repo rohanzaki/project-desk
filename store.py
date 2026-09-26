@@ -747,7 +747,8 @@ class Store(FeaturesMixin):
             self._answer(c, project, sender, reply_to, mid)
             kind = kind or ('answer' if c.execute("SELECT 1 FROM questions WHERE message_id=? AND answer_message_id=?",
                                                   (reply_to, mid)).fetchone() else None)
-        c.execute('INSERT INTO message_meta VALUES(?,?,?)', (mid, kind or infer_kind(body), reply_to))
+        c.execute('INSERT INTO message_meta VALUES(?,?,?)',
+                  (mid, kind or ('crossover' if crossover_id else infer_kind(body)), reply_to))
         data = {'message_id':mid,'recipient':recipient}
         if cross:
             data['from_project'] = project
