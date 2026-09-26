@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"><style>body{margin:0;background:#e7e3d9;font-family:"Aptos","IBM Plex Sans","Segoe UI",system-ui,sans-serif;color:#182329}a{color:#2456d6}a:hover{color:#1e49b7}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.55)}.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}</style></helmet>
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Redesign — one desk, triage first</span></div>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,260px));gap:24px;margin:0 0 28px;font-size:12px;line-height:1.5;color:#2d3b42">
+<div><div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#67746f;margin-bottom:4px">Problem</div>Today's page stacks up to eight conditional banners (approvals, stale claims, prod, crossovers, locks, action points) above the tasks. What needs the human moves around and competes with everything else.</div>
+<div><div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#67746f;margin-bottom:4px">1 · One attention queue</div>Approvals, open questions, stale claims, refused claims and action points become one typed list with inline one-click answers and J/K keys.</div>
+<div><div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#67746f;margin-bottom:4px">2 · Ledger + focus pane</div>Tasks stay a continuous ledger (per DESIGN.md). Selecting one opens claims, evidence, journal and discussion beside it instead of expanding in place.</div>
+<div><div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#67746f;margin-bottom:4px">3 · Coordination views</div>Agent lanes show who did what over time; the claims map answers "who holds this path" before anyone plans. Palette and tokens come from static/style.css.</div>
+</div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Command center — attention queue, presence, ledger, focus pane (interactive: click rows, answer items)</div>
+<div class="dv-card" style="width:1440px;border-radius:10px">
+<div style="display:flex;flex-direction:column;background:#f1eee6;font-family:'Aptos','IBM Plex Sans','Segoe UI',system-ui,sans-serif;color:#182329">
+<div style="height:52px;display:grid;grid-template-columns:216px minmax(0,1fr) auto;align-items:center;background:#182329;color:#fbfaf5;border-bottom:1px solid #344148">
+<div style="display:flex;align-items:center;gap:10px;padding:0 16px"><span style="display:inline-grid;place-items:center;width:28px;height:28px;border:1px solid #526069;border-radius:7px;background:#24343c;color:#e8bb78;font-size:10px;font-weight:800;letter-spacing:.1em">PD</span><span style="font-family:Georgia,serif;font-size:17px">Project Desk<span style="color:#e8ad63">.</span></span></div>
+<div style="display:flex;align-items:center;gap:12px;padding:0 20px">
+<button style="display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:1px solid #3a4950;border-radius:7px;background:#24343c;color:#fbfaf5;font:inherit;font-size:12px;font-weight:600;cursor:pointer"><span style="width:7px;height:7px;border-radius:50%;background:#56ba79"></span>media-intelligence<span style="color:#87918d;font-size:10px">▾</span></button>
+<div style="flex:1;max-width:520px;display:flex;align-items:center;justify-content:space-between;height:32px;padding:0 10px;border:1px solid #3a4950;border-radius:7px;background:#1f2d33;color:#87918d;font-size:12px">Jump to a task, path, agent or command<span style="font-family:'IBM Plex Mono',monospace;font-size:10px;padding:2px 6px;border:1px solid #3a4950;border-radius:4px;color:#abb7b3">⌘K</span></div>
+<div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:7px;background:#24343c;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#cbd7d3"><span style="color:#87918d">prod</span>web · 352e463<span style="color:#87918d">·</span><span style="color:#e8bb78">lane held</span></div>
+</div>
+<div style="display:flex;align-items:center;gap:10px;padding:0 16px;font-size:11px;color:#cbd7d3">
+<span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:50%;background:#56ba79;box-shadow:0 0 0 4px rgba(86,186,121,.12)"></span>Live · 5 agents · 06:45</span>
+<button style="position:relative;display:inline-flex;align-items:center;gap:5px;height:32px;padding:0 10px;border:1px solid #4b5a61;border-radius:7px;background:#25333a;color:#f8f7f2;font:inherit;font-size:11px;cursor:pointer"><svg viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path></svg><span style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#e4ad72;color:#172524;font-size:9px;font-weight:800">{{ attCount }}</span></button>
+<span style="display:inline-grid;place-items:center;width:30px;height:30px;border-radius:999px;background:#4e5ea2;color:#fff;font-size:10px;font-weight:700">RZ</span>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:216px minmax(0,1fr) 404px;min-height:960px">
+<nav style="display:flex;flex-direction:column;gap:18px;padding:16px 10px;background:#f5f1e8;border-right:1px solid #d8d5ca">
+<div style="display:flex;flex-direction:column;gap:2px">
+<sc-for list="{{ navItems }}" as="n" hint-placeholder-count="8">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:6px;font-size:13px;font-weight:{{ n.fw }};color:{{ n.fg }};background:{{ n.bg }};cursor:pointer">{{ n.label }}<span style="font-size:11px;color:{{ n.cfg }};font-variant-numeric:tabular-nums;font-weight:600">{{ n.count }}</span></div>
+</sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:2px">
+<div style="padding:0 10px 6px;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#87918d">Projects</div>
+<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;background:#ece8de;font-size:12px;font-weight:600"><span style="width:7px;height:7px;border-radius:50%;background:#56ba79"></span>media-intelligence<span style="margin-left:auto;font-size:11px;color:#67746f">5</span></div>
+<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12px;color:#2d3b42"><span style="width:7px;height:7px;border-radius:50%;background:#56ba79"></span>pallet-level<span style="margin-left:auto;font-size:11px;color:#67746f">2</span></div>
+<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:12px;color:#67746f"><span style="width:7px;height:7px;border-radius:50%;background:#9aa6a0"></span>project-desk<span style="margin-left:auto;font-size:11px">0</span></div>
+<div style="padding:6px 10px;font-size:12px;color:#2456d6;font-weight:600;cursor:pointer">+ New project</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="padding:0 10px;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#87918d">Crossovers</div>
+<div style="margin:0 4px;padding:9px 10px;border:1px solid #d8d5ca;border-radius:8px;background:#fbfaf5;font-size:12px;display:flex;flex-direction:column;gap:4px"><div style="display:flex;justify-content:space-between;gap:6px"><strong style="font-weight:600">Tender API contract</strong><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#87918d">x-3f9a</span></div><div style="font-size:11px;color:#67746f">with pallet-level · contract v2</div><div style="font-size:11px;color:#8a5619;font-weight:600">Awaiting their sign-off</div></div>
+</div>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:6px;padding:0 4px">
+<button style="height:34px;border:1px solid #b9c0b8;border-radius:7px;background:#fffefa;color:#30444a;font:inherit;font-size:12px;font-weight:600;cursor:pointer">Connect agents</button>
+<div style="padding:4px 6px;font-size:11px;color:#67746f">Announce restart · Settings</div>
+</div>
+</nav>
+
+<main style="min-width:0;display:flex;flex-direction:column;gap:22px;padding:20px 24px 28px;background-color:#f1eee6;background-image:linear-gradient(rgba(24,35,41,.032) 1px,transparent 1px),linear-gradient(90deg,rgba(24,35,41,.032) 1px,transparent 1px);background-size:28px 28px">
+
+<section style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+<div style="display:flex;align-items:baseline;gap:10px"><h2 style="margin:0;font-size:19px;font-weight:700;letter-spacing:-.02em">Needs you</h2><span style="font-size:13px;color:#87918d;font-variant-numeric:tabular-nums">{{ attCount }}</span><sc-if value="{{ showKeyHints }}" hint-placeholder-val="{{ true }}"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#87918d">J/K move · ⏎ open · 1–3 answer · E done</span></sc-if></div>
+<div style="display:flex;gap:2px;padding:2px;border:1px solid #c3c1b8;border-radius:8px;background:#fbfaf5">
+<sc-for list="{{ attTabs }}" as="tb" hint-placeholder-count="6"><button onClick="{{ tb.on }}" style="height:26px;padding:0 10px;border:0;border-radius:6px;background:{{ tb.bg }};color:{{ tb.fg }};font:inherit;font-size:11px;font-weight:600;cursor:pointer">{{ tb.label }}</button></sc-for>
+</div>
+</div>
+<sc-if value="{{ notice }}"><div style="padding:9px 12px;background:#e6f0ef;border:1px solid #bdd5d2;border-radius:8px;color:#27494c;font-size:12px">{{ notice }}</div></sc-if>
+<div style="border:1px solid #c3c1b8;border-radius:10px;background:#fbfaf5;box-shadow:0 10px 28px rgba(24,35,41,.08);overflow:hidden">
+<sc-for list="{{ att }}" as="a" hint-placeholder-count="5">
+<div style="display:grid;grid-template-columns:104px minmax(0,1fr) auto;gap:14px;align-items:center;padding:12px 14px;border-bottom:1px solid #e4e1d8;background:{{ a.rowBg }}">
+<div style="display:flex;align-items:center;gap:7px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:{{ a.fg }}"><span style="width:7px;height:7px;border-radius:2px;background:{{ a.fg }}"></span>{{ a.type }}</div>
+<div style="min-width:0;display:flex;flex-direction:column;gap:3px">
+<div style="font-size:13px;font-weight:600;color:#1f2f35;text-wrap:pretty">{{ a.title }}</div>
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;color:#67746f"><span style="display:inline-flex;align-items:center;gap:5px;color:{{ a.who.c }};background:{{ a.who.bg }};border-radius:999px;padding:2px 7px 2px 3px;font-size:10px;font-weight:700;line-height:1"><span style="display:inline-grid;place-items:center;min-width:16px;height:16px;border-radius:999px;background:{{ a.who.c }};color:#fff;font-size:7px">{{ a.who.ini }}</span>{{ a.who.name }}</span>{{ a.meta }}</div>
+</div>
+<div style="display:flex;gap:6px;align-items:center">
+<sc-for list="{{ a.actions }}" as="b" hint-placeholder-count="2"><button onClick="{{ b.on }}" style="height:28px;padding:0 10px;border:1px solid {{ b.bd }};border-radius:7px;background:{{ b.bg }};color:{{ b.fg }};font:inherit;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;opacity:.6;margin-right:5px">{{ b.key }}</span>{{ b.label }}</button></sc-for>
+</div>
+</div>
+</sc-for>
+<sc-if value="{{ attEmpty }}"><div style="padding:22px;text-align:center;font-size:12px;color:#67746f">Nothing waiting on you here.</div></sc-if>
+</div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:baseline;justify-content:space-between"><div style="display:flex;align-items:baseline;gap:10px"><h2 style="margin:0;font-size:15px;font-weight:700">On the desk</h2><span style="font-size:11px;color:#67746f">5 checked in · 1 stale (claims stay reserved)</span></div><span style="font-size:11px;color:#2456d6;font-weight:600">Agent lanes →</span></div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<sc-for list="{{ sessions }}" as="s" hint-placeholder-count="6">
+<div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 11px;border:1px solid {{ s.cardBd }};border-radius:9px;background:{{ s.cardBg }}">
+<span style="display:inline-grid;place-items:center;width:28px;height:28px;border-radius:999px;background:{{ s.c }};color:#fff;font-size:9px;font-weight:700;box-shadow:0 0 0 3px {{ s.ring }}">{{ s.ini }}</span>
+<div style="min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.name }}</div><div style="font-size:11px;color:#67746f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.doing }}</div></div>
+<div style="text-align:right"><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:{{ s.ageFg }}">{{ s.age }}</div><div style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:{{ s.ageFg }}">{{ s.state }}</div></div>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+<div style="display:flex;align-items:baseline;gap:10px"><h2 style="margin:0;font-size:19px;font-weight:700;letter-spacing:-.02em">Work</h2><span style="font-size:13px;color:#87918d">6 open · 2 done today</span></div>
+<div style="display:flex;gap:8px;align-items:center">
+<div style="display:flex;align-items:center;width:260px;height:32px;padding:0 10px;border:1px solid #bfc4bc;border-radius:7px;background:#fffefa;font-size:12px;color:#87918d">Filter: owner:codex path:src/ status:blocked</div>
+<button style="height:32px;padding:0 12px;border:1px solid #b9c0b8;border-radius:7px;background:#fffefa;color:#30444a;font:inherit;font-size:12px;font-weight:600">Group: status ▾</button>
+<button style="height:32px;padding:0 12px;border:1px solid #2456d6;border-radius:7px;background:#2456d6;color:#fff;font:inherit;font-size:12px;font-weight:600">Add task</button>
+</div>
+</div>
+<div style="border:1px solid #c3c1b8;border-radius:10px;background:#fbfaf5;box-shadow:0 10px 28px rgba(24,35,41,.08);overflow:hidden">
+<div style="display:grid;grid-template-columns:84px minmax(0,1fr) 150px 180px 92px 44px;gap:12px;padding:8px 14px 8px 17px;border-bottom:1px solid #d8d5ca;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#87918d"><span>Status</span><span>Task · next step</span><span>Owner</span><span>Claims</span><span>Evidence</span><span style="text-align:right">Upd.</span></div>
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="4">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;background:#e9e5dc;border-bottom:1px solid #d8d5ca;color:#4d5955;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase"><span>{{ g.label }}</span><span style="display:grid;place-items:center;min-width:22px;height:18px;border-radius:999px;background:#d8d3c8;color:#3d4945;font-size:10px">{{ g.n }}</span></div>
+<sc-for list="{{ g.rows }}" as="t" hint-placeholder-count="2">
+<div onClick="{{ t.on }}" style="position:relative;display:grid;grid-template-columns:84px minmax(0,1fr) 150px 180px 92px 44px;gap:12px;align-items:center;padding:{{ rowPad }};padding-left:17px;border-bottom:1px solid #e4e1d8;background:{{ t.rowBg }};box-shadow:{{ t.rowSh }};cursor:pointer">
+<span style="position:absolute;left:0;top:0;bottom:0;width:3px;background:{{ t.s.bar }}"></span>
+<span><span style="display:inline-block;border:1px solid {{ t.s.bd }};border-radius:5px;padding:3px 6px;font-size:9px;font-weight:800;letter-spacing:.035em;background:{{ t.s.bg }};color:{{ t.s.fg }}">{{ t.st }}</span></span>
+<div style="min-width:0;display:flex;flex-direction:column;gap:3px"><div style="display:flex;align-items:center;gap:6px;min-width:0"><span style="font-size:13px;font-weight:600;color:#1f2f35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.title }}</span><sc-if value="{{ t.prLabel }}"><span style="flex:none;border:1px solid #e9c2bc;border-radius:5px;padding:1px 5px;font-size:9px;font-weight:800;text-transform:uppercase;color:#8e372e;background:#f7e4e0">{{ t.prLabel }}</span></sc-if><sc-if value="{{ t.xo }}"><span style="flex:none;font-family:'IBM Plex Mono',monospace;font-size:9px;padding:1px 5px;border-radius:5px;background:#e7edff;color:#2049ad">{{ t.xo }}</span></sc-if></div><div style="font-size:12px;color:#4d5955;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.next }}</div></div>
+<span style="display:inline-flex;align-items:center;gap:5px;min-width:0;max-width:100%;justify-self:start;color:{{ t.o.c }};background:{{ t.o.bg }};border-radius:999px;padding:2px 8px 2px 3px;font-size:10px;font-weight:700;line-height:1"><span style="flex:none;display:inline-grid;place-items:center;min-width:16px;height:16px;border-radius:999px;background:{{ t.o.c }};color:#fff;font-size:7px">{{ t.o.ini }}</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.o.short }}</span></span>
+<div style="min-width:0;display:flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#596b65"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.path0 }}</span><sc-if value="{{ t.more }}"><span style="flex:none;font-size:10px;color:#87918d">{{ t.more }}</span></sc-if></div>
+<span style="justify-self:start;font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:{{ t.evBg }};color:{{ t.evFg }};white-space:nowrap">{{ t.evText }}</span>
+<span style="text-align:right;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#87918d">{{ t.up }}</span>
+</div>
+</sc-for>
+</sc-for>
+</div>
+</section>
+</main>
+
+<aside style="min-width:0;display:flex;flex-direction:column;background:#fbfaf5;border-left:1px solid #d8d5ca">
+<div style="padding:18px 20px 14px;border-bottom:1px solid #e4e1d8;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:8px"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#87918d">{{ sel.id }}</span><span style="display:inline-block;border:1px solid {{ sel.s.bd }};border-radius:5px;padding:3px 6px;font-size:9px;font-weight:800;background:{{ sel.s.bg }};color:{{ sel.s.fg }}">{{ sel.st }}</span><sc-if value="{{ sel.prLabel }}"><span style="border:1px solid #e9c2bc;border-radius:5px;padding:3px 6px;font-size:9px;font-weight:800;text-transform:uppercase;color:#8e372e;background:#f7e4e0">{{ sel.prLabel }}</span></sc-if><span style="margin-left:auto;font-size:11px;color:#87918d">updated {{ sel.up }} ago</span></div>
+<h3 style="margin:0;font-size:18px;line-height:1.25;font-weight:700;letter-spacing:-.015em;text-wrap:pretty">{{ sel.title }}</h3>
+<div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#67746f"><span style="display:inline-flex;align-items:center;gap:5px;color:{{ sel.o.c }};background:{{ sel.o.bg }};border-radius:999px;padding:2px 8px 2px 3px;font-size:10px;font-weight:700;line-height:1"><span style="display:inline-grid;place-items:center;min-width:16px;height:16px;border-radius:999px;background:{{ sel.o.c }};color:#fff;font-size:7px">{{ sel.o.ini }}</span>{{ sel.o.name }}</span><span style="font-family:'IBM Plex Mono',monospace">{{ sel.o.branch }}</span></div>
+<div style="display:flex;gap:6px;flex-wrap:wrap">
+<sc-for list="{{ sel.buttons }}" as="b" hint-placeholder-count="5"><button style="height:28px;padding:0 10px;border:1px solid {{ b.bd }};border-radius:7px;background:{{ b.bg }};color:{{ b.fg }};font:inherit;font-size:11px;font-weight:600;cursor:pointer">{{ b.label }}</button></sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:18px;padding:16px 20px 20px">
+<div style="padding:11px 12px;border:1px solid #cbd7fa;border-radius:8px;background:#f3f6fe"><div style="font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#2049ad;margin-bottom:4px">{{ sel.nextLabel }}</div><div style="font-size:13px;line-height:1.45;color:#1f2f35">{{ sel.next }}</div></div>
+
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;justify-content:space-between;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#67746f"><span>Claims</span><span style="letter-spacing:0;text-transform:none;font-weight:500;color:#87918d">released on DONE</span></div>
+<div style="border:1px solid #dddcd3;border-radius:8px;background:#fffdf8">
+<sc-for list="{{ sel.claims }}" as="c" hint-placeholder-count="2"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;border-bottom:1px solid #ece8de;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#2d3b42"><span style="overflow-wrap:anywhere">{{ c.p }}</span><span style="flex:none;font-family:'Aptos','IBM Plex Sans',sans-serif;font-size:10px;font-weight:600;color:{{ c.fg }}">{{ c.note }}</span></div></sc-for>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;justify-content:space-between;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#67746f"><span>Evidence</span><span style="letter-spacing:0;text-transform:none;font-weight:600;color:{{ sel.evFg }}">{{ sel.evText }}</span></div>
+<div style="display:grid;grid-template-columns:86px minmax(0,1fr);border:1px solid #dddcd3;border-radius:8px;background:#fffdf8;font-size:11px">
+<sc-for list="{{ sel.checks }}" as="k" hint-placeholder-count="4"><span style="padding:6px 10px;border-bottom:1px solid #ece8de;color:#87918d">{{ k.k }}</span><span style="padding:6px 10px;border-bottom:1px solid #ece8de;font-family:'IBM Plex Mono',monospace;color:#2d3b42;overflow-wrap:anywhere">{{ k.v }}</span></sc-for>
+</div>
+</div>
+
+<sc-if value="{{ sel.lesson }}"><div style="padding:10px 12px;border:1px solid #e6c99e;border-radius:8px;background:#fdf6ea;font-size:12px;line-height:1.45;color:#4d3a17"><div style="font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#8a5619;margin-bottom:3px">Lesson on these paths</div>{{ sel.lesson }}</div></sc-if>
+
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#67746f">Journal</div>
+<div style="display:flex;flex-direction:column">
+<sc-for list="{{ sel.journal }}" as="j" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:40px 64px minmax(0,1fr);gap:6px;padding:5px 0;border-left:1px solid #d8d5ca;padding-left:10px;font-size:11px"><span style="font-family:'IBM Plex Mono',monospace;color:#87918d">{{ j.t }}</span><span style="font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#234675;padding-top:1px">{{ j.k }}</span><span style="color:#2d3b42">{{ j.text }}</span></div></sc-for>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#67746f">Discussion</div>
+<sc-for list="{{ sel.talk }}" as="m" hint-placeholder-count="2"><div style="display:flex;gap:8px;align-items:flex-start"><span style="flex:none;display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:{{ m.w.c }};color:#fff;font-size:8px;font-weight:700">{{ m.w.ini }}</span><div style="min-width:0"><div style="font-size:11px;color:#67746f"><strong style="color:#213137;font-weight:600">{{ m.w.name }}</strong> · {{ m.t }}</div><div style="font-size:12px;line-height:1.45;color:#2d3d42">{{ m.text }}</div></div></div></sc-for>
+<sc-if value="{{ sel.noTalk }}"><div style="font-size:11px;color:#87918d">No comments yet.</div></sc-if>
+<div style="display:flex;flex-direction:column;gap:6px;padding:8px;border:1px solid #bfc4bc;border-radius:8px;background:#fffefa"><div style="font-size:12px;color:#87918d;min-height:36px">Comment to {{ sel.o.name }}… (@codex, @claude, @all)</div><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:10px;color:#87918d">A receipt confirms reading, not approval.</span><button style="height:26px;padding:0 10px;border:1px solid #2456d6;border-radius:6px;background:#2456d6;color:#fff;font:inherit;font-size:11px;font-weight:600">Send</button></div></div>
+</div>
+</div>
+</aside>
+</div>
+</div>
+</div>
+</div>
+
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Agent lanes — the last two hours per session: claims, messages, refusals, deploys</div>
+<div class="dv-card" style="width:1440px;border-radius:10px">
+<div style="display:grid;grid-template-columns:minmax(0,1fr) 320px;background:#fbfaf5;font-family:'Aptos','IBM Plex Sans','Segoe UI',system-ui,sans-serif;color:#182329">
+<div style="display:flex;flex-direction:column;padding:20px 24px 22px;gap:14px;min-width:0">
+<div style="display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:baseline;gap:10px"><h2 style="margin:0;font-size:19px;font-weight:700;letter-spacing:-.02em">Agent lanes</h2><span style="font-size:12px;color:#67746f">media-intelligence · 05:00 – 07:00 PKT</span></div>
+<div style="display:flex;gap:2px;padding:2px;border:1px solid #c3c1b8;border-radius:8px"><span style="padding:4px 10px;border-radius:6px;background:#182329;color:#fff;font-size:11px;font-weight:600">2h</span><span style="padding:4px 10px;font-size:11px;font-weight:600;color:#67746f">8h</span><span style="padding:4px 10px;font-size:11px;font-weight:600;color:#67746f">24h</span></div></div>
+<div style="display:grid;grid-template-columns:230px minmax(0,1fr);border:1px solid #c3c1b8;border-radius:10px;overflow:hidden">
+<div style="padding:8px 12px;background:#ece8de;border-bottom:1px solid #d8d5ca;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#67746f">Session</div>
+<div style="position:relative;height:31px;background:#ece8de;border-bottom:1px solid #d8d5ca;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#67746f">
+<sc-for list="{{ ticks }}" as="k" hint-placeholder-count="5"><span style="position:absolute;top:9px;left:{{ k.l }};transform:translateX(-50%)">{{ k.label }}</span></sc-for>
+</div>
+<sc-for list="{{ lanes }}" as="r" hint-placeholder-count="6">
+<div style="display:flex;align-items:center;gap:9px;padding:0 12px;height:58px;border-bottom:1px solid #e4e1d8;opacity:{{ r.op }}"><span style="flex:none;display:inline-grid;place-items:center;width:26px;height:26px;border-radius:999px;background:{{ r.s.c }};color:#fff;font-size:9px;font-weight:700">{{ r.s.ini }}</span><div style="min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.s.name }}</div><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#87918d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.s.branch }}</div></div></div>
+<div style="position:relative;height:58px;border-bottom:1px solid #e4e1d8;background-image:linear-gradient(90deg,#ece8de 1px,transparent 1px);background-size:25% 100%">
+<sc-for list="{{ r.bars }}" as="b" hint-placeholder-count="1"><div style="position:absolute;top:{{ b.top }};height:{{ b.h }};left:{{ b.l }};width:{{ b.w }};border:1px {{ b.bs }} {{ b.bd }};background:{{ b.bg }};border-radius:5px;display:flex;align-items:center;padding:0 8px;overflow:hidden;font-size:11px;font-weight:600;color:{{ b.fg }};white-space:nowrap">{{ b.label }}</div></sc-for>
+<sc-for list="{{ r.marks }}" as="m" hint-placeholder-count="1"><div style="position:absolute;top:4px;left:{{ m.l }};transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:1px"><span style="display:inline-grid;place-items:center;width:16px;height:16px;border-radius:{{ m.rad }};background:{{ m.bg }};color:#fff;font-size:9px;font-weight:800;box-shadow:0 0 0 2px #fbfaf5">{{ m.sym }}</span></div></sc-for>
+<div style="position:absolute;top:0;bottom:0;left:87.5%;width:2px;background:#2456d6"></div>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:11px;color:#67746f;align-items:center">
+<span style="display:flex;align-items:center;gap:6px"><span style="width:18px;height:10px;border-radius:3px;border:1px solid #2456d6;background:#e7edff"></span>Claim held</span>
+<span style="display:flex;align-items:center;gap:6px"><span style="width:18px;height:10px;border-radius:3px;border:1px dashed #c17b2c;background:#f8ead6"></span>Blocked / queued</span>
+<span style="display:flex;align-items:center;gap:6px"><span style="width:18px;height:10px;border-radius:3px;border:1px dashed #9aa6a0;background:#ecefec"></span>Stale owner</span>
+<span style="display:flex;align-items:center;gap:6px"><span style="display:inline-grid;place-items:center;width:14px;height:14px;border-radius:3px;background:#3e745a;color:#fff;font-size:8px;font-weight:800">D</span>Deploy</span>
+<span style="display:flex;align-items:center;gap:6px"><span style="display:inline-grid;place-items:center;width:14px;height:14px;border-radius:50%;background:#4e5ea2;color:#fff;font-size:8px;font-weight:800">?</span>Question / approval</span>
+<span style="display:flex;align-items:center;gap:6px"><span style="display:inline-grid;place-items:center;width:14px;height:14px;border-radius:3px;background:#a44339;color:#fff;font-size:8px;font-weight:800">✕</span>Refused claim</span>
+<span style="display:flex;align-items:center;gap:6px"><span style="width:2px;height:14px;background:#2456d6"></span>Now 06:45</span>
+</div>
+</div>
+<aside style="padding:20px;border-left:1px solid #d8d5ca;background:#f5f1e8;display:flex;flex-direction:column;gap:12px">
+<h3 style="margin:0;font-size:14px;font-weight:700">Caught tonight</h3>
+<sc-for list="{{ caught }}" as="c" hint-placeholder-count="3"><div style="padding:11px 12px;border:1px solid #d8d5ca;border-radius:9px;background:#fbfaf5;display:flex;flex-direction:column;gap:4px"><div style="display:flex;justify-content:space-between;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:{{ c.fg }}"><span>{{ c.type }}</span><span style="font-family:'IBM Plex Mono',monospace;letter-spacing:0;color:#87918d">{{ c.t }}</span></div><div style="font-size:12px;line-height:1.45;color:#2d3b42">{{ c.text }}</div></div></sc-for>
+<div style="margin-top:auto;font-size:11px;line-height:1.5;color:#67746f">Click any bar to open that task in the focus pane. Hovering a marker shows the message or evidence behind it.</div>
+</aside>
+</div>
+</div>
+</div>
+
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Claims &amp; lanes — who holds which path, before anyone plans around it</div>
+<div class="dv-card" style="width:1100px;border-radius:10px">
+<div style="display:grid;grid-template-columns:minmax(0,1fr) 400px;background:#fbfaf5;font-family:'Aptos','IBM Plex Sans','Segoe UI',system-ui,sans-serif;color:#182329">
+<div style="padding:20px 24px;display:flex;flex-direction:column;gap:12px;min-width:0">
+<div style="display:flex;align-items:baseline;gap:10px"><h2 style="margin:0;font-size:19px;font-weight:700;letter-spacing:-.02em">Claims</h2><span style="font-size:12px;color:#67746f">14 paths held by 5 sessions · directory claims cover descendants</span></div>
+<div style="border:1px solid #c3c1b8;border-radius:10px;overflow:hidden">
+<sc-for list="{{ tree }}" as="n" hint-placeholder-count="12">
+<div style="display:grid;grid-template-columns:minmax(0,1fr) 190px 64px;gap:10px;align-items:center;height:34px;padding:0 12px;border-bottom:1px solid #ece8de;background:{{ n.bg }}">
+<span style="padding-left:{{ n.pad }};font-family:'IBM Plex Mono',monospace;font-size:12px;color:{{ n.fg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ n.name }}</span>
+<sc-if value="{{ n.h }}"><span style="justify-self:start;display:inline-flex;align-items:center;gap:5px;color:{{ n.h.c }};background:{{ n.h.bg }};border-radius:999px;padding:2px 8px 2px 3px;font-size:10px;font-weight:700;line-height:1"><span style="display:inline-grid;place-items:center;min-width:16px;height:16px;border-radius:999px;background:{{ n.h.c }};color:#fff;font-size:7px">{{ n.h.ini }}</span>{{ n.h.short }}</span></sc-if>
+<sc-if value="{{ n.noH }}"><span></span></sc-if>
+<span style="text-align:right;font-size:10px;font-weight:700;color:{{ n.noteFg }}">{{ n.note }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+<aside style="padding:20px;border-left:1px solid #d8d5ca;background:#f5f1e8;display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#67746f">Would it conflict?</div>
+<div style="display:flex;align-items:center;height:36px;padding:0 10px;border:1px solid #6681ce;box-shadow:0 0 0 3px rgba(36,86,214,.13);border-radius:7px;background:#fffefa;font-family:'IBM Plex Mono',monospace;font-size:12px">components/cctv/player.tsx</div>
+<div style="padding:11px 12px;border:1px solid #e9c2bc;border-radius:8px;background:#f7e4e0;font-size:12px;line-height:1.5;color:#5b241d"><strong style="font-weight:700;color:#8e372e">Held</strong> by Claude · capture-v2 through the directory claim <span style="font-family:'IBM Plex Mono',monospace">components/cctv/</span> on t-9c07. 1 lesson applies. <span style="color:#2456d6;font-weight:600">Queue for it</span> · <span style="color:#2456d6;font-weight:600">Ask for handoff</span></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#67746f">Service lanes</div>
+<div style="padding:12px;border:1px solid #d8d5ca;border-radius:9px;background:#fbfaf5;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600">service:web-prod</span><span style="font-size:10px;color:#67746f">prod 352e463 · 17m</span></div>
+<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px">
+<span style="display:inline-flex;align-items:center;gap:5px;color:#a55c36;background:#f4e7de;border-radius:999px;padding:2px 8px 2px 3px;font-size:10px;font-weight:700;line-height:1;box-shadow:0 0 0 2px #a55c36"><span style="display:inline-grid;place-items:center;min-width:16px;height:16px;border-radius:999px;background:#a55c36;color:#fff;font-size:7px">CL</span>wa-card · holding</span>
+<span style="color:#87918d">→</span>
+<span style="display:inline-flex;align-items:center;gap:5px;color:#176e76;background:#e1f0ef;border-radius:999px;padding:2px 8px 2px 3px;font-size:10px;font-weight:700;line-height:1"><span style="display:inline-grid;place-items:center;min-width:16px;height:16px;border-radius:999px;background:#176e76;color:#fff;font-size:7px">CX</span>pie-menu</span>
+<span style="color:#87918d">→</span>
+<span style="display:inline-flex;align-items:center;gap:5px;color:#a55c36;background:#f4e7de;border-radius:999px;padding:2px 8px 2px 3px;font-size:10px;font-weight:700;line-height:1"><span style="display:inline-grid;place-items:center;min-width:16px;height:16px;border-radius:999px;background:#a55c36;color:#fff;font-size:7px">CL</span>capture-v2</span>
+</div>
+<div style="font-size:11px;color:#67746f">When it frees, the head gets YOUR TURN and 15 min to claim.</div>
+</div>
+<div style="padding:12px;border:1px solid #d8d5ca;border-radius:9px;background:#fbfaf5;display:flex;justify-content:space-between;align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600">service:worker-deploy</span><span style="font-size:11px;color:#2f694e;font-weight:600">Free · last 0c81d2e</span></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#67746f">Held in other projects</div>
+<div style="padding:10px 12px;border:1px solid #e6c99e;border-radius:9px;background:#fdf6ea;display:flex;justify-content:space-between;align-items:center;font-size:11px"><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:#182329">service:tender-api</span><span style="color:#8a5619;font-weight:600">pallet-level · t-c21e</span></div>
+</div>
+</aside>
+</div>
+</div>
+</div>
+
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>⌘K palette — every human action from the dashboard, by keyboard</div>
+<div class="dv-card" style="width:620px;border-radius:12px;background:#3a4649">
+<div style="padding:40px 30px;background:rgba(26,38,40,.58)">
+<div style="border:1px solid #d3d0c7;border-radius:12px;background:#fbfaf5;box-shadow:0 26px 100px rgba(29,42,50,.34);overflow:hidden;font-family:'Aptos','IBM Plex Sans','Segoe UI',system-ui,sans-serif;color:#182329">
+<div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid #e4e1d8;font-size:15px"><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;padding:2px 6px;border-radius:4px;background:#e7edff;color:#2049ad">t-51f8</span>reassign<span style="width:1px;height:18px;background:#2456d6"></span></div>
+<div style="padding:6px">
+<sc-for list="{{ palette }}" as="p" hint-placeholder-count="6">
+<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 10px;border-radius:7px;background:{{ p.bg }}"><div style="min-width:0"><div style="font-size:13px;font-weight:600">{{ p.label }}</div><div style="font-size:11px;color:#67746f">{{ p.sub }}</div></div><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#87918d">{{ p.key }}</span></div>
+</sc-for>
+</div>
+<div style="display:flex;justify-content:space-between;padding:8px 16px;border-top:1px solid #e4e1d8;background:#f5f1e8;font-size:10px;color:#67746f"><span>↑↓ move · ⏎ run · tab add argument</span><span>Actions are recorded as you (rohan)</span></div>
+</div>
+</div>
+</div>
+</div>
+
+</div>
+<p class="dv-next">Try next: "make <a class="dv-oid" href="#1a">1a</a> the full prototype with working filters" · "put <a class="dv-oid" href="#1b">1b</a> lanes inside the 1a agent strip" · "mobile version of the Needs you queue"</p>
+</section>
+
+<section class="dv-turn" id="t0">
+<div class="dv-thd"><a class="dv-tid" href="#t0">0</a><span class="dv-tname">Today — recreated from static/index.html + style.css (for comparison)</span></div>
+<div class="dv-opts">
+<div class="dv-opt" id="0a"><div class="dv-olabel"><a class="dv-oid" href="#0a">0a</a>Current dashboard, same data</div>
+<div class="dv-card" style="width:1440px;border-radius:10px">
+<div style="font-family:'Aptos','Satoshi','Geist','IBM Plex Sans','Segoe UI',system-ui,sans-serif;font-size:15px;line-height:1.5;color:#182329;background-color:#f1eee6;background-image:linear-gradient(rgba(24,35,41,.032) 1px,transparent 1px),linear-gradient(90deg,rgba(24,35,41,.032) 1px,transparent 1px);background-size:28px 28px">
+<header style="min-height:68px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:30px;padding:12px 46px;color:#fbfaf5;background:#182329;border-bottom:1px solid #344148">
+<div style="display:flex;align-items:center;gap:12px"><span style="display:inline-grid;place-items:center;width:40px;height:40px;border:1px solid #526069;border-radius:8px;background:#24343c;color:#e8bb78;font-size:11px;font-weight:850;letter-spacing:.1em">PD</span><div><div style="margin:0;font-size:24px;line-height:1;font-weight:760;letter-spacing:-.035em">Project Desk<span style="color:#e8ad63">.</span></div><div style="margin:4px 0 0;color:#abb7b3;font-size:11px;font-weight:600">Live coordination workspace</div></div></div>
+<nav style="display:flex;justify-content:center;gap:4px"><span style="padding:9px 12px;color:#fff;background:#243239;font-size:12px;font-weight:720;border-radius:6px">Tasks</span><span style="padding:9px 12px;color:#bec8c4;font-size:12px;font-weight:720">Inbox</span><span style="padding:9px 12px;color:#bec8c4;font-size:12px;font-weight:720">Agents</span><span style="padding:9px 12px;color:#bec8c4;font-size:12px;font-weight:720">Activity</span></nav>
+<div style="display:flex;gap:8px;align-items:center;font-size:11px;color:#cbd7d3"><span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:50%;background:#56ba79;box-shadow:0 0 0 4px rgba(86,186,121,.12)"></span>Updated 26 Sept, 06:45</span><span style="display:inline-flex;align-items:center;gap:5px;padding:8px 11px;border:1px solid #4b5a61;border-radius:7px;background:#25333a;color:#f8f7f2;font-size:12px;font-weight:740"><svg viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path></svg>Alerts<span style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#e4ad72;color:#172524;font-size:9px;font-weight:900">14</span></span><span style="padding:8px 11px;border:1px solid #4b5a61;border-radius:7px;background:#25333a;color:#f8f7f2;font-size:12px;font-weight:740">Refresh</span></div>
+</header>
+<div style="padding:28px 46px 34px">
+<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:30px;margin-bottom:22px"><div><span style="display:block;color:#667061;font-size:10px;font-weight:850;letter-spacing:.13em;text-transform:uppercase">Shared operating desk</span><div style="margin:3px 0 5px;font-size:34px;line-height:1.05;font-weight:760;letter-spacing:-.04em">Keep the next move visible.</div><div style="color:#596964;font-size:14px">Ownership, blockers, handoffs, and decisions—without losing the thread.</div></div>
+<div style="display:flex;align-items:end;gap:8px"><div style="font-size:11px;font-weight:760;color:#5e6d68;width:260px">Project<div style="margin-top:5px;border:1px solid #bfc4bc;border-radius:7px;background:#fffefa;color:#182329;font-size:13px;padding:9px 10px;font-weight:400">Media Intelligence</div></div><sc-for list="{{ oldBtns }}" as="b" hint-placeholder-count="3"><span style="font-size:12px;font-weight:740;border:1px solid #b9c0b8;border-radius:7px;background:#fffefa;color:#30444a;padding:8px 11px;white-space:nowrap">{{ b }}</span></sc-for><span style="font-size:12px;color:#2456d6;padding:8px 0">All projects</span></div></div>
+<div style="margin:8px 0;padding:8px 13px;border-radius:8px;background:#fff6e0;font-size:13px">Shared locks held in other projects: service:tender-api (pallet-level, c21e)</div>
+<div style="margin:8px 0;padding:8px 13px;border-radius:8px;background:#eaf1fd;font-size:13px;color:#172b46"><strong>Crossovers with other projects</strong><div><span style="text-transform:uppercase;font-size:11px;font-weight:600;color:#234675">open</span> <strong>Tender API contract</strong> <span style="font-size:11px;color:#6f7d78">x-3f9a · contract v2</span></div></div>
+<div style="margin:8px 0;padding:10px 13px;border-radius:8px;background:#fff6e0;border:1px solid #e8c77a"><div style="font-size:14px;font-weight:700;color:#8c570c;margin-bottom:6px">Decisions waiting for you</div><div style="padding:6px 0;border-top:1px solid #efdcaa;font-size:13px"><strong>Ship tender scheduler enabled or dormant?</strong> <span style="font-size:11px;color:#6f7d78">Codex mapper A · 26 Sept, 06:20</span></div></div>
+<div style="margin:8px 0;padding:10px 13px;border-radius:8px;background:#f3f6fb;border:1px solid #dbe3ef"><div style="display:flex;justify-content:space-between"><div><div style="font-size:14px;font-weight:700;color:#234675">Action points</div><div style="font-size:11px;color:#6f7d78">What agents left for you, grouped by task. A task's newest list replaces its older one. Tick when done, or clear a whole task.</div></div><div style="display:flex;gap:7px;align-items:center"><span style="font-size:11px;border:1px solid #bfc4bc;border-radius:7px;padding:6px 8px;background:#fffefa">For you (2)</span><span style="font-size:11px;font-weight:740;border:1px solid #b9c0b8;border-radius:7px;padding:6px 8px;background:#fffefa">Clear…</span><span style="font-size:11px;font-weight:740;border:1px solid #b9c0b8;border-radius:7px;padding:6px 8px;background:#fffefa">Add</span></div></div><div style="border-top:1px solid #dbe3ef;padding:5px 0;margin-top:6px;font-size:13px;font-weight:650;color:#234675">▾ <span style="display:inline-block;border:1px solid #c6ddce;border-radius:5px;padding:3px 6px;font-size:9px;font-weight:850;background:#e5f0e8;color:#2f694e">DONE</span> Security fix: signed media URLs <span style="font-size:11px;color:#6f7d78;font-weight:400">2 items</span></div></div>
+<div style="margin:8px 0;padding:8px 13px;border-radius:8px;background:#fdecea;font-size:12px;color:#172b46"><strong>Stale claims</strong> · owner silent 6h+ (use Reassign or Close on the task, or let the owner resume): 51f8 Alert dedupe window · Codex · alerting since 00:33</div>
+<div style="margin:8px 0 18px;padding:8px 13px;border-radius:8px;background:#eef5f0;font-size:12px;color:#172b46"><strong>On prod</strong> web-prod 352e463 · Claude · 06:28<div><strong>Queues</strong> service:web-prod: Codex · pie-menu → Claude · capture-v2</div></div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);margin-bottom:28px;border:1px solid #c3c1b8;border-radius:10px;background:rgba(251,250,245,.88);overflow:hidden">
+<sc-for list="{{ oldMetrics }}" as="m" hint-placeholder-count="4"><div style="display:grid;grid-template-columns:1fr auto;align-items:center;gap:1px 12px;min-height:82px;padding:14px 18px;border-right:1px solid #d8d5ca"><span style="font-size:12px;font-weight:800">{{ m.l }}</span><strong style="grid-row:1/3;grid-column:2;font-size:28px;line-height:1;font-weight:760">{{ m.n }}</strong><small style="font-size:10px;color:#67746f">{{ m.s }}</small></div></sc-for>
+</div>
+<div style="display:grid;grid-template-columns:minmax(0,1.9fr) minmax(350px,.82fr);gap:24px;align-items:start">
+<div>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div><span style="display:block;color:#667061;font-size:10px;font-weight:850;letter-spacing:.13em;text-transform:uppercase">Task workspace</span><div style="font-size:19px;font-weight:760;letter-spacing:-.02em;color:#243238">Work on the desk <span style="font-size:12px;color:#87918d">6</span></div></div><span style="font-size:12px;font-weight:740;border:1px solid #2456d6;border-radius:7px;background:#2456d6;color:#fff;padding:8px 11px">Add task</span></div>
+<div style="display:grid;grid-template-columns:minmax(250px,1.4fr) repeat(4,minmax(110px,.6fr)) 78px;gap:9px;margin-bottom:12px;padding:11px;border:1px solid #c3c1b8;border-radius:10px;background:#f8f5ed">
+<sc-for list="{{ oldFilters }}" as="f" hint-placeholder-count="6"><div style="font-size:11px;font-weight:760;color:#5e6d68">{{ f.l }}<div style="margin-top:5px;border:1px solid #bfc4bc;border-radius:7px;background:#fffefa;color:{{ f.c }};font-size:13px;font-weight:400;padding:9px 10px;white-space:nowrap;overflow:hidden">{{ f.v }}</div></div></sc-for>
+</div>
+<div style="overflow:hidden;border:1px solid #c3c1b8;border-radius:10px;background:rgba(251,250,245,.94)">
+<div style="display:flex;justify-content:space-between;padding:8px 14px;background:#e9e5dc;border-bottom:1px solid #d8d5ca;color:#4d5955;font-size:10px;font-weight:850;letter-spacing:.1em;text-transform:uppercase"><span>Tasks</span><strong style="display:grid;place-items:center;min-width:22px;height:20px;border-radius:999px;background:#d8d3c8;color:#3d4945;font-size:10px">6</strong></div>
+<sc-for list="{{ oldTasks }}" as="t" hint-placeholder-count="3">
+<div style="position:relative;border-bottom:1px solid #d8d5ca;background:#fffdf8">
+<span style="position:absolute;left:0;top:0;bottom:0;width:3px;background:{{ t.s.bar }}"></span>
+<div style="display:grid;grid-template-columns:34px minmax(210px,1.2fr) auto minmax(220px,.9fr);align-items:center;gap:12px;padding:13px 14px 13px 10px">
+<span style="display:grid;place-items:center;width:34px;height:34px;color:#8b9590"><svg viewBox="0 0 24 24" style="width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="m8 3 8 0-1 6 3 3v2H6v-2l3-3-1-6Zm4 11v7"></path></svg></span>
+<div><div style="font-size:14px;line-height:1.3;margin:0 0 6px;color:#1f2f35;font-weight:780">{{ t.title }}</div><div style="display:flex;align-items:center;gap:6px"><span style="display:inline-flex;align-items:center;gap:5px;color:{{ t.o.c }};background:{{ t.o.bg }};border-radius:999px;padding:2px 7px 2px 3px;font-size:10px;font-weight:820;line-height:1"><span style="display:inline-grid;place-items:center;min-width:18px;height:18px;border-radius:999px;background:{{ t.o.c }};color:#fff;font-size:8px">{{ t.o.ini }}</span>{{ t.o.name }}</span><strong style="font-size:11px;color:#38484d">{{ t.o.name }}</strong><span style="font-size:11px;color:#6f7d78">Updated 26 Sept, 06:4x</span></div></div>
+<div style="display:flex;gap:6px"><span style="display:inline-block;border:1px solid {{ t.s.bd }};border-radius:5px;padding:3px 6px;font-size:9px;font-weight:850;background:{{ t.s.bg }};color:{{ t.s.fg }}">{{ t.st }}</span></div>
+<p style="margin:0;color:#35464b;font-size:12px;line-height:1.4"><span style="display:block;margin-bottom:2px;color:#7a8580;font-size:9px;font-weight:850;letter-spacing:.09em;text-transform:uppercase">Next</span>{{ t.next }}</p>
+</div>
+<div style="display:flex;justify-content:space-between;padding:8px 14px 8px 56px;border-top:1px solid #e5e1d7;background:#f9f7f0;color:#52615d;font-size:11px;font-weight:760"><span><span style="color:#2456d6;margin-right:8px">+</span>Task details</span><span style="font-size:10px;color:#818c87;font-weight:650">{{ t.pathCount }}</span></div>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;justify-content:space-between;align-items:center;min-height:46px;padding:8px 10px;border:1px solid #c3c1b8;border-top:0;border-radius:0 0 10px 10px;background:#f7f4ec;color:#68746f;font-size:10px"><span>1–3 of 6</span><span>Previous · Page 1 / 2 · Next</span></div>
+</div>
+<div style="border:1px solid #c3c1b8;border-radius:10px;background:rgba(251,250,245,.96);overflow:hidden">
+<div style="display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid #d8d5ca;background:#ebe7dd"><span style="padding:11px 8px;text-align:center;font-size:12px;font-weight:740;background:#fffdf8;box-shadow:inset 0 -2px 0 #2456d6">Inbox 9</span><span style="padding:11px 8px;text-align:center;font-size:12px;font-weight:740;color:#66736e">Notes</span><span style="padding:11px 8px;text-align:center;font-size:12px;font-weight:740;color:#66736e">Lessons 12</span><span style="padding:11px 8px;text-align:center;font-size:12px;font-weight:740;color:#66736e">Agents</span></div>
+<div style="padding:15px 16px 12px;border-bottom:1px solid #e4e1d8;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:16px;font-weight:760">Team inbox</div><div style="font-size:11px;color:#6f7d78">Recent shared messages and task conversations.</div></div><span style="font-size:12px;font-weight:740;border:1px solid #b9c0b8;border-radius:7px;background:#fffefa;padding:8px 11px">Write message</span></div>
+<div style="padding:0 16px">
+<sc-for list="{{ oldMsgs }}" as="m" hint-placeholder-count="2"><div style="position:relative;padding:13px 0 13px 12px;border-bottom:1px solid #e1ded5"><span style="position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:3px;background:{{ m.w.c }}"></span><div style="display:flex;justify-content:space-between;font-size:10px"><span style="display:inline-flex;align-items:center;gap:5px;color:{{ m.w.c }};background:{{ m.w.bg }};border-radius:999px;padding:2px 7px 2px 3px;font-weight:820"><span style="display:inline-grid;place-items:center;min-width:18px;height:18px;border-radius:999px;background:{{ m.w.c }};color:#fff;font-size:8px">{{ m.w.ini }}</span>{{ m.w.name }}</span><span style="font-size:9px;color:#78857f">26 Sept, {{ m.t }}</span></div><p style="font-size:12px;line-height:1.5;margin:7px 0;color:#2d3d42">{{ m.text }}</p><div style="font-size:9px;color:#96601b;font-weight:850">Sent · Awaiting read</div></div></sc-for>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;comfortable&quot;,&quot;compact&quot;],&quot;default&quot;:&quot;comfortable&quot;,&quot;tsType&quot;:&quot;'comfortable'|'compact'&quot;},&quot;showKeyHints&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { sel: 't-4e1a', done: {}, att: 'all', notice: '' };
+  static A = { rohan:{c:'#4e5ea2',bg:'#e7e9f6'}, claude:{c:'#a55c36',bg:'#f4e7de'}, codex:{c:'#176e76',bg:'#e1f0ef'} };
+  static ST = {
+    RUNNING:{fg:'#2049ad',bg:'#e7edff',bd:'#cbd7fa',bar:'#2456d6'},
+    BLOCKED:{fg:'#8a5619',bg:'#f8ead6',bd:'#e6c99e',bar:'#c17b2c'},
+    PAUSED:{fg:'#8a5619',bg:'#f8ead6',bd:'#e6c99e',bar:'#c17b2c'},
+    QUEUED:{fg:'#58645c',bg:'#edf0eb',bd:'#d0d6cf',bar:'#8b948f'},
+    DONE:{fg:'#2f694e',bg:'#e5f0e8',bd:'#c6ddce',bar:'#3e745a'}
+  };
+  S(){
+    const A=Component.A, mk=(id,kind,name,short,branch,doing,age,state)=>({id,kind,ini:kind==='claude'?'CL':kind==='codex'?'CX':'RZ',name,short,branch,doing,age,state,...A[kind]});
+    return {
+      wa:mk('wa','claude','Claude · wa-card','wa-card','feat/wa-card-renderer','Holding service:web-prod','40s','live'),
+      cc:mk('cc','claude','Claude · capture-v2','capture-v2','feat/capture-v2-worklist','CCTV interface rewrite','1m','live'),
+      gs:mk('gs','codex','Codex supervisor + Luna','supervisor','feat/gsd-onboarding','gsd-onboarding','3m','live'),
+      ma:mk('ma','codex','Codex mapper A','mapper A','feat/tenders','Waiting on your decision','12m','waiting'),
+      pm:mk('pm','codex','Codex · pie-menu','pie-menu','feat/pie-menu-dial','Queued for web-prod','8m','live'),
+      al:mk('al','codex','Codex · alerting','alerting','fix/alert-dedupe','Alert dedupe window','6h 12m','stale'),
+      rz:mk('rz','rohan','Rohan (you)','you','—','','','live')
+    };
+  }
+  tasks(){
+    return [
+      {id:'t-4e1a',st:'RUNNING',pr:'high',title:'WhatsApp card renderer → headless Chrome',next:'Deploy once Chrome launch fails soft on the target box',o:'wa',paths:['src/lib/render/whatsapp-card.ts','src/lib/render/chrome.ts','service:web-prod'],ev:'checked',evText:'✓ 42 passed',up:'40s'},
+      {id:'t-9c07',st:'RUNNING',title:'CCTV interface rewrite',next:'Merge new base 352e463, then re-run e2e',o:'cc',paths:['app/(dash)/cctv/','components/cctv/'],ev:'',evText:'—',up:'1m'},
+      {id:'t-77d0',st:'RUNNING',title:'gsd-onboarding',next:'Capture owner DONE acknowledgment read',o:'gs',paths:['.planning/','AGENTS.md','CLAUDE.md','docs/engineering/','scripts/gsd'],ev:'checked',evText:'✓ drift 0',up:'3m'},
+      {id:'t-2b33',st:'BLOCKED',title:'Government-tender connector',next:'Waiting on your decision: ship the scheduler dormant or enabled',o:'ma',paths:['src/connectors/tenders/','jobs/scheduler.ts'],ev:'checked',evText:'✓ 31 passed',up:'25m',xo:'x-3f9a'},
+      {id:'t-51f8',st:'PAUSED',title:'Alert dedupe window',next:'Owner silent 6h — reassign, close, or let it resume',o:'al',paths:['src/alerts/dedupe.ts'],ev:'failing',evText:'✕ 2 failed',up:'6h'},
+      {id:'t-a310',st:'QUEUED',title:'Pie menu dial',next:'Queued for service:web-prod behind Claude · wa-card',o:'pm',paths:['components/pie-menu/'],ev:'',evText:'—',up:'8m'},
+      {id:'t-0f12',st:'DONE',title:'Security fix: signed media URLs',next:'Deployed 352e463 · 118 tests passed',o:'wa',paths:['src/lib/media/sign.ts','middleware.ts'],ev:'checked',evText:'✓ 118 passed',up:'17m'},
+      {id:'t-6d44',st:'DONE',title:'Capture-v2 worklist drift check',next:'Six capture-v2 files re-synced from the published commit',o:'cc',paths:['capture-v2/'],ev:'checked',evText:'✓ 6 files',up:'52m'}
+    ];
+  }
+  detail(id){
+    const D={
+      't-4e1a':{checks:[['command','pnpm vitest run src/lib/render'],['exit code','0'],['tests','42 passed · 0 failed'],['commit','4e1a9b2'],['deployment','not yet — holds service:web-prod']],
+        lesson:'Chrome is not installed on the prod box by default. The renderer must fail soft and fall back to the static card. — Codex supervisor',
+        journal:[['06:41','claim','Took service:web-prod as queue head'],['06:38','progress','Launch failure now falls back to static PNG card'],['06:34','question','Supervisor: does Chrome exist on target? Answered: yes, /usr/bin/chromium'],['06:30','claim','Claimed 2 paths · 1 lesson handed over']],
+        talk:[['gs','06:33','Before you ship: confirm launch failure is soft. I don’t want alerts silently stopping.'],['wa','06:38','Confirmed. Fallback covered by render.fallback.test.ts, exit 0.']]},
+      't-9c07':{checks:[['command','not reported'],['base','1a7e0c2 (prod is 352e463)']],journal:[['06:31','question','Asked: merge new base before continuing?'],['06:22','refused','Blocked Codex · pie-menu from components/cctv/'],['05:20','claim','Claimed 2 directories']],talk:[]},
+      't-2b33':{checks:[['command','pytest tests/connectors/tenders'],['exit code','0'],['tests','31 passed · 0 failed'],['scheduler','off by default']],lesson:'A connector that ships dormant must say so in its completion evidence. — Rohan',journal:[['06:20','approval','Requested: ship scheduler dormant or enabled?'],['06:02','crossover','Joined x-3f9a with pallet-level'],['05:30','claim','Claimed 2 paths']],talk:[]},
+      't-51f8':{checks:[['command','pnpm test src/alerts'],['exit code','1'],['tests','14 passed · 2 failed']],journal:[['00:33','progress','Last check-in from owner'],['00:10','claim','Claimed src/alerts/dedupe.ts']],talk:[]}
+    };
+    return D[id]||{checks:[['command','see journal']],journal:[['—','claim','Claimed recorded paths']],talk:[]};
+  }
+  renderVals(){
+    const S=this.S(), ST=Component.ST, st=this.state, tasks=this.tasks();
+    const btn=(label,on,kind,key)=>({label,on,key:key||'',bg:kind==='p'?'#2456d6':'#fffefa',fg:kind==='p'?'#fff':'#30444a',bd:kind==='p'?'#2456d6':'#b9c0b8'});
+    const resolve=(id,msg)=>()=>this.setState(s=>({done:{...s.done,[id]:true},notice:msg}));
+    const attAll=[
+      {id:'a1',kind:'approval',type:'Approval',fg:'#4e5ea2',who:S.ma,title:'Ship the tender scheduler dormant or enabled on deploy?',meta:'Government-tender connector · 25m ago',actions:[btn('Ship dormant',resolve('a1','Decision “Ship dormant” sent to Codex mapper A and saved as a note.'),'p','1'),btn('Enable on deploy',resolve('a1','Decision “Enable on deploy” sent to Codex mapper A.'),'','2'),btn('Other…',()=>{},'','3')]},
+      {id:'a2',kind:'stale',type:'Stale claim',fg:'#a44339',who:S.al,title:'Alert dedupe window — owner silent 6h 12m, still holds src/alerts/dedupe.ts',meta:'Claims never expire on their own',actions:[btn('Reassign…',resolve('a2','Reassign dialog would open for t-51f8.'),'','1'),btn('Close with note',resolve('a2','t-51f8 closed; src/alerts/dedupe.ts released.'),'','2')]},
+      {id:'a3',kind:'question',type:'Question',fg:'#176e76',who:S.cc,title:'CCTV rewrite branched off 1a7e0c2; prod is now 352e463. Merge before continuing?',meta:'CCTV interface rewrite · 14m ago',actions:[btn('Yes, merge first',resolve('a3','Reply sent to Claude · capture-v2.'),'p','1'),btn('Reply…',()=>{},'','2')]},
+      {id:'a4',kind:'refused',type:'Refused claim',fg:'#8a5619',who:S.pm,title:'Tried to claim components/cctv/ — held by Claude · capture-v2',meta:'Refused, not merged · 06:22',actions:[btn('Queue it',resolve('a4','Codex · pie-menu queued for components/cctv/.'),'','1'),btn('Ask handoff',resolve('a4','Handoff request sent to Claude · capture-v2.'),'','2')]},
+      {id:'a5',kind:'action',type:'Action points',fg:'#3e745a',who:S.wa,title:'Rotate MEDIA_URL_SECRET on staging · Confirm CDN purge finished',meta:'2 left for you on Security fix: signed media URLs',actions:[btn('Tick both',resolve('a5','2 action points ticked. Undo under Recently done.'),'','E')]}
+    ].filter(a=>!st.done[a.id]);
+    const att=attAll.filter(a=>st.att==='all'||a.kind===st.att).map((a,i)=>({...a,rowBg:i===0?'#fffdf8':'#fbfaf5'}));
+    const tabDefs=[['all','All'],['approval','Approvals'],['question','Questions'],['stale','Stale'],['refused','Refused'],['action','Action points']];
+    const attTabs=tabDefs.map(([k,l])=>({label:l,on:()=>this.setState({att:k}),bg:st.att===k?'#182329':'transparent',fg:st.att===k?'#fff':'#67746f'}));
+    const evc=t=>t.ev==='checked'?{evBg:'#e5f0e8',evFg:'#2f694e'}:t.ev==='failing'?{evBg:'#f7e4e0',evFg:'#a44339'}:{evBg:'transparent',evFg:'#87918d'};
+    const row=t=>({...t,...evc(t),s:ST[t.st],o:S[t.o],path0:t.paths[0],more:t.paths.length>1?'+'+(t.paths.length-1):'',prLabel:t.pr||'',xo:t.xo||'',
+      on:()=>this.setState({sel:t.id}),rowBg:st.sel===t.id?'#eef2fd':'#fffdf8',rowSh:st.sel===t.id?'inset 0 0 0 1px #9ba8c9':'none'});
+    const g=(label,f)=>{const rows=tasks.filter(f).map(row);return {label,n:rows.length,rows};};
+    const groups=[g('Running',t=>t.st==='RUNNING'),g('Blocked & paused',t=>t.st==='BLOCKED'||t.st==='PAUSED'),g('Queued',t=>t.st==='QUEUED'),g('Done today',t=>t.st==='DONE')];
+    const t=tasks.find(x=>x.id===st.sel)||tasks[0], d=this.detail(t.id);
+    const claimNote=p=>p.startsWith('service:')?{note:'deploy lane · holding',fg:'#8a5619'}:p.endsWith('/')?{note:'dir · descendants',fg:'#67746f'}:{note:'file',fg:'#87918d'};
+    const sel={...row(t),nextLabel:t.st==='DONE'?'Outcome':'Next step',claims:t.paths.map(p=>({p,...claimNote(p)})),checks:d.checks.map(([k,v])=>({k,v})),lesson:d.lesson||'',
+      journal:d.journal.map(([t,k,text])=>({t,k,text})),talk:d.talk.map(([w,t,text])=>({w:S[w],t,text})),noTalk:!d.talk.length,
+      buttons:t.st==='DONE'?[btn('Reopen & reassign',null,'p')]:[btn('Pause'),btn('Reassign'),btn('Set priority'),btn('Cross over'),btn('Close with note')]};
+    const sessions=['wa','cc','gs','ma','pm','al'].map(k=>{const s=S[k];const stale=s.state==='stale',wait=s.state==='waiting';
+      return {...s,cardBg:stale?'#f5f1e8':'#fbfaf5',cardBd:stale?'#d8d5ca':wait?'#e6c99e':'#d8d5ca',ring:stale?'#ece8de':s.bg,ageFg:stale?'#a44339':wait?'#8a5619':'#3e745a',state:stale?'stale':wait?'waiting':'live'};});
+    const nav=[['Command center',attAll.length,true],['Tasks',8],['Agent lanes',6],['Claims & locks',14],['Deploy lanes',1],['Inbox',9],['Lessons',12],['Activity','']].map(([label,count,a])=>({label,count,fw:a?700:500,fg:a?'#182329':'#2d3b42',bg:a?'#fbfaf5':'transparent',cfg:a?'#2456d6':'#87918d'}));
+    // lanes (05:00–07:00 → 0–100%)
+    const pc=m=>(m/120*100).toFixed(1)+'%';
+    const bar=(a,b,label,kind,s)=>{const k={run:{bg:s.bg,bd:s.c,fg:s.c,bs:'solid'},done:{bg:'#e5f0e8',bd:'#3e745a',fg:'#2f694e',bs:'solid'},block:{bg:'#f8ead6',bd:'#c17b2c',fg:'#8a5619',bs:'dashed'},stale:{bg:'#ecefec',bd:'#9aa6a0',fg:'#67746f',bs:'dashed'},lane:{bg:'#f8ead6',bd:'#c17b2c',fg:'#8a5619',bs:'solid'}}[kind];
+      return {l:pc(a),w:pc(b-a),label,top:kind==='lane'?'40px':'22px',h:kind==='lane'?'10px':'24px',...k};};
+    const mark=(m,sym,kind)=>({l:pc(m),sym,bg:{d:'#3e745a',q:'#4e5ea2',x:'#a44339',h:'#c17b2c'}[kind],rad:kind==='q'?'50%':'3px'});
+    const lanes=[
+      {s:S.wa,bars:[bar(35,88,'Security fix: signed media URLs','done',S.wa),bar(90,105,'WhatsApp card','run',S.wa),bar(101,105,'','lane',S.wa)],marks:[mark(88,'D','d'),mark(94,'?','q')]},
+      {s:S.cc,bars:[bar(20,105,'CCTV interface rewrite','run',S.cc)],marks:[mark(82,'✕','x'),mark(91,'?','q')]},
+      {s:S.gs,bars:[bar(0,105,'gsd-onboarding','run',S.gs)],marks:[mark(70,'H','h')]},
+      {s:S.ma,bars:[bar(30,80,'Government-tender connector','run',S.ma),bar(80,105,'blocked on you','block',S.ma)],marks:[mark(80,'?','q')]},
+      {s:S.pm,bars:[bar(65,82,'Pie menu dial','run',S.pm),bar(90,105,'queued web-prod','block',S.pm)],marks:[mark(82,'✕','x')]},
+      {s:S.al,bars:[bar(0,105,'Alert dedupe window · owner silent since 00:33','stale',S.al)],marks:[]}
+    ].map(r=>({...r,op:r.s.state==='stale'?.7:1}));
+    const ticks=[0,30,60,90,120].map((m,i)=>({l:i===0?'3%':i===4?'96%':pc(m),label:['05:00','05:30','06:00','06:30','07:00'][i]}));
+    const caught=[
+      {type:'Refused claim',fg:'#a44339',t:'06:22',text:'Codex · pie-menu asked for components/cctv/ while Claude · capture-v2 held it. Refused before any edit.'},
+      {type:'Stale base',fg:'#8a5619',t:'06:31',text:'CCTV rewrite branched off 1a7e0c2. After 352e463 shipped, its next deploy would have reverted the security fix.'},
+      {type:'Deploy check',fg:'#176e76',t:'06:34',text:'Supervisor asked whether Chrome exists on target before the renderer swap shipped. Checked, not assumed.'}
+    ];
+    const tree=[
+      ['app/',0],['(dash)/cctv/',1,'cc','t-9c07'],['components/',0],['cctv/',1,'cc','refused 06:22','#a44339'],['pie-menu/',1,'pm','queued','#8a5619'],
+      ['src/',0],['alerts/dedupe.ts',1,'al','stale 6h','#a44339'],['connectors/tenders/',1,'ma','t-2b33'],['lib/render/',1],['chrome.ts',2,'wa','t-4e1a'],['whatsapp-card.ts',2,'wa','t-4e1a'],
+      ['jobs/scheduler.ts',0,'ma','t-2b33'],['.planning/  AGENTS.md  CLAUDE.md',0,'gs','t-77d0'],['docs/engineering/  scripts/gsd',0,'gs','t-77d0']
+    ].map(([name,dep,h,note,nf])=>({name,pad:(dep*18)+'px',h:h?S[h]:null,noH:!h,note:note||'',noteFg:nf||'#87918d',fg:h?'#182329':'#87918d',bg:nf==='#a44339'?'#fdf3f1':'#fbfaf5'}));
+    const palette=[
+      {label:'Reassign “Alert dedupe window”',sub:'to a live session · reason required',key:'⏎',bg:'#e7edff'},
+      {label:'Close “Alert dedupe window” with note',sub:'releases src/alerts/dedupe.ts',key:'⌘⏎',bg:'transparent'},
+      {label:'Resume Codex · alerting',sub:'lets the owner pick it back up on next check-in',key:'',bg:'transparent'},
+      {label:'Message Codex · alerting',sub:'direct · stays unread until acknowledged',key:'',bg:'transparent'},
+      {label:'Check path src/alerts/',sub:'would_conflict — read only',key:'',bg:'transparent'},
+      {label:'Open journal for t-51f8',sub:'2 entries',key:'',bg:'transparent'}
+    ];
+    const oldTasks=tasks.slice(0,3).map(t=>({...t,s:ST[t.st],o:S[t.o],pathCount:t.paths.length+' paths · 0 comments'}));
+    const oldMsgs=[{w:S.cc,t:'06:31',text:'CCTV rewrite branched off 1a7e0c2; prod is now 352e463. Merge before continuing?'},{w:S.gs,t:'06:33',text:'Before you ship: confirm launch failure is soft. I don’t want alerts silently stopping.'}];
+    const density=this.props.density??'comfortable';
+    return {
+      attCount:attAll.length, att, attTabs, attEmpty:!att.length, notice:st.notice, showKeyHints:this.props.showKeyHints??true,
+      rowPad:density==='compact'?'6px 14px':'11px 14px', groups, sel, sessions, navItems:nav,
+      lanes, ticks, caught, tree, palette,
+      oldBtns:['Connect agents','Project settings','Announce restart'], oldTasks, oldMsgs,
+      oldMetrics:[{l:'Active',n:6,s:'open tasks'},{l:'Blocked',n:1,s:'need action'},{l:'Paused',n:1,s:'claims held'},{l:'Completed',n:2,s:'recorded work'}],
+      oldFilters:[{l:'Find a task',v:'Title, owner, next step, or path',c:'#87918d'},{l:'Status',v:'Active work',c:'#182329'},{l:'Owner',v:'All owners',c:'#182329'},{l:'Task priority',v:'All priorities',c:'#182329'},{l:'Sort',v:'Recently updated',c:'#182329'},{l:'Rows',v:'10',c:'#182329'}]
+    };
+  }
+}
+</script>
+</body>
+</html>

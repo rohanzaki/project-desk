@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"><style>html,body{margin:0;height:100%;background:#f1eee6}body{font-family:"Aptos","IBM Plex Sans","Segoe UI",system-ui,sans-serif;color:#182329;font-size:14px}a{color:#2456d6}a:hover{color:#1e49b7}*{box-sizing:border-box}button{font:inherit}input,select,textarea{font:inherit}</style></helmet>
+<div style="height:100vh;display:grid;grid-template-rows:52px minmax(0,1fr);background:#f1eee6">
+
+<div style="display:grid;grid-template-columns:216px minmax(0,1fr) auto;align-items:center;background:#182329;color:#fbfaf5;border-bottom:1px solid #344148">
+<div style="display:flex;align-items:center;gap:10px;padding:0 16px"><span style="display:inline-grid;place-items:center;width:28px;height:28px;border:1px solid #526069;border-radius:7px;background:#24343c;color:#e8bb78;font-size:10px;font-weight:800;letter-spacing:.1em">PD</span><span style="font-family:Georgia,serif;font-size:17px;white-space:nowrap">Project Desk<span style="color:#e8ad63">.</span></span></div>
+<div style="display:flex;align-items:center;gap:12px;padding:0 20px;min-width:0">
+<button onClick="{{ onProject }}" style="display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:1px solid #3a4950;border-radius:7px;background:#24343c;color:#fbfaf5;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap"><span style="width:7px;height:7px;border-radius:50%;background:#56ba79"></span>media-intelligence<span style="color:#87918d;font-size:10px">▾</span></button>
+<button onClick="{{ openPalette }}" style="flex:1;max-width:520px;min-width:0;display:flex;align-items:center;justify-content:space-between;height:32px;padding:0 10px;border:1px solid #3a4950;border-radius:7px;background:#1f2d33;color:#87918d;font-size:12px;cursor:pointer;text-align:left" style-hover="border-color:#526069;color:#abb7b3"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Jump to a task, path, agent or command</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;padding:2px 6px;border:1px solid #3a4950;border-radius:4px;color:#abb7b3">⌘K</span></button>
+<button onClick="{{ goClaims }}" style="display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:0;border-radius:7px;background:#24343c;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#cbd7d3;cursor:pointer;white-space:nowrap"><span style="color:#87918d">prod</span>web · 352e463<span style="color:#87918d">·</span><span style="color:{{ laneFg }}">{{ laneLabel }}</span></button>
+</div>
+<div style="display:flex;align-items:center;gap:10px;padding:0 16px;font-size:11px;color:#cbd7d3;white-space:nowrap">
+<span style="display:flex;align-items:center;gap:7px"><span style="width:8px;height:8px;border-radius:50%;background:{{ liveDot }};box-shadow:0 0 0 4px rgba(86,186,121,.12)"></span>{{ liveLabel }}</span>
+<button onClick="{{ goCommand }}" style="display:inline-flex;align-items:center;gap:5px;height:32px;padding:0 10px;border:1px solid #4b5a61;border-radius:7px;background:#25333a;color:#f8f7f2;font-size:11px;cursor:pointer" style-hover="background:#32434b"><svg viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path></svg><span style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#e4ad72;color:#172524;font-size:9px;font-weight:800">{{ attCount }}</span></button>
+<span style="display:inline-grid;place-items:center;width:30px;height:30px;border-radius:999px;background:#4e5ea2;color:#fff;font-size:10px;font-weight:700">RZ</span>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:{{ cols }};min-height:0">
+<nav style="display:flex;flex-direction:column;gap:18px;padding:16px 10px;background:#f5f1e8;border-right:1px solid #d8d5ca;overflow:auto">
+<div style="display:flex;flex-direction:column;gap:2px">
+<sc-for list="{{ nav }}" as="n" hint-placeholder-count="7">
+<button onClick="{{ n.on }}" style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border:0;border-radius:6px;font-size:13px;font-weight:{{ n.fw }};color:{{ n.fg }};background:{{ n.bg }};cursor:pointer;text-align:left;white-space:nowrap;gap:8px" style-hover="background:#ece8de"><span style="overflow:hidden;text-overflow:ellipsis">{{ n.label }}</span><span style="font-size:11px;color:{{ n.cfg }};font-weight:600">{{ n.count }}</span></button>
+</sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:2px">
+<div style="padding:0 10px 6px;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#87918d">Projects</div>
+<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;background:#ece8de;font-size:12px;font-weight:600"><span style="width:7px;height:7px;border-radius:50%;background:#56ba79"></span>media-intelligence<span style="margin-left:auto;font-size:11px;color:#67746f">{{ liveCount }}</span></div>
+<button onClick="{{ onProject }}" style="display:flex;align-items:center;gap:8px;padding:6px 10px;border:0;background:transparent;font-size:12px;color:#2d3b42;cursor:pointer;text-align:left"><span style="width:7px;height:7px;border-radius:50%;background:#56ba79"></span>pallet-level<span style="margin-left:auto;font-size:11px;color:#67746f">2</span></button>
+<button onClick="{{ onProject }}" style="display:flex;align-items:center;gap:8px;padding:6px 10px;border:0;background:transparent;font-size:12px;color:#67746f;cursor:pointer;text-align:left"><span style="width:7px;height:7px;border-radius:50%;background:#9aa6a0"></span>project-desk<span style="margin-left:auto;font-size:11px">0</span></button>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="padding:0 10px;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#87918d">Crossovers</div>
+<button onClick="{{ openTender }}" style="margin:0 4px;padding:9px 10px;border:1px solid #d8d5ca;border-radius:8px;background:#fbfaf5;font-size:12px;display:flex;flex-direction:column;gap:4px;text-align:left;cursor:pointer" style-hover="border-color:#9ba8c9"><span style="display:flex;justify-content:space-between;gap:6px;width:100%"><strong style="font-weight:600">Tender API contract</strong><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#87918d">x-3f9a</span></span><span style="font-size:11px;color:#67746f">with pallet-level · contract v2</span><span style="font-size:11px;color:#8a5619;font-weight:600">Awaiting their sign-off</span></button>
+</div>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:6px;padding:0 4px">
+<button onClick="{{ openConnect }}" style="height:34px;border:1px solid #b9c0b8;border-radius:7px;background:#fffefa;color:#30444a;font-size:12px;font-weight:600;cursor:pointer" style-hover="background:#f1f4fb;border-color:#9ba8c9">Connect agents</button>
+<div style="padding:4px 6px;font-size:10px;color:#87918d;line-height:1.5">⌘K palette · J/K move · 1–3 answer · / search</div>
+</div>
+</nav>
+
+<main style="min-width:0;overflow:auto;background-color:#f1eee6;background-image:linear-gradient(rgba(24,35,41,.032) 1px,transparent 1px),linear-gradient(90deg,rgba(24,35,41,.032) 1px,transparent 1px);background-size:28px 28px">
+<div style="display:flex;flex-direction:column;gap:22px;padding:20px 24px 40px">
+
+<sc-if value="{{ isCommand }}" hint-placeholder-val="{{ true }}">
+<section style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+<div style="display:flex;align-items:baseline;gap:10px"><h2 style="margin:0;font-size:19px;font-weight:700;letter-spacing:-.02em">Needs you</h2><span style="font-size:13px;color:#87918d">{{ attCount }}</span></div>
+<div style="display:flex;flex-wrap:wrap;gap:2px;padding:2px;border:1px solid #c3c1b8;border-radius:8px;background:#fbfaf5">
+<sc-for list="{{ attTabs }}" as="tb" hint-placeholder-count="6"><button onClick="{{ tb.on }}" style="height:26px;padding:0 10px;border:0;border-radius:6px;background:{{ tb.bg }};color:{{ tb.fg }};font-size:11px;font-weight:600;cursor:pointer">{{ tb.label }}</button></sc-for>
+</div>
+</div>
+<div style="border:1px solid #c3c1b8;border-radius:10px;background:#fbfaf5;box-shadow:0 10px 28px rgba(24,35,41,.08);overflow:hidden">
+<sc-for list="{{ att }}" as="a" hint-placeholder-count="4">
+<div onClick="{{ a.focus }}" style="display:grid;grid-template-columns:{{ attCols }};gap:10px 14px;align-items:center;padding:12px 14px;border-bottom:1px solid #e4e1d8;background:{{ a.bg }};box-shadow:{{ a.sh }};cursor:pointer">
+<div style="display:flex;align-items:center;gap:7px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:{{ a.fg }}"><span style="width:7px;height:7px;border-radius:2px;background:{{ a.fg }}"></span>{{ a.type }}</div>
+<div style="min-width:0;display:flex;flex-direction:column;gap:3px">
+<div style="font-size:13px;font-weight:600;color:#1f2f35;text-wrap:pretty">{{ a.title }}</div>
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;color:#67746f"><span style="display:inline-flex;align-items:center;gap:5px;color:{{ a.who.c }};background:{{ a.who.bg }};border-radius:999px;padding:2px 7px 2px 3px;font-size:10px;font-weight:700;line-height:1"><span style="display:inline-grid;place-items:center;min-width:16px;height:16px;border-radius:999px;background:{{ a.who.c }};color:#fff;font-size:7px">{{ a.who.ini }}</span>{{ a.who.name }}</span>{{ a.meta }}</div>
+</div>
+<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:{{ actJustify }};grid-column:{{ actSpan }}">
+<sc-for list="{{ a.actions }}" as="b" hint-placeholder-count="2"><button onClick="{{ b.on }}" style="height:28px;padding:0 10px;border:1px solid {{ b.bd }};border-radius:7px;background:{{ b.bg }};color:{{ b.fg }};font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap" style-hover="filter:brightness(.96)"><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;opacity:.6;margin-right:5px">{{ b.key }}</span>{{ b.label }}</button></sc-for>
+</div>
+</div>
+</sc-for>
+<sc-if value="{{ attEmpty }}"><div style="padding:26px;text-align:center;font-size:12px;color:#67746f">Nothing waiting on you. Agents keep working; new approvals, questions and stale claims land here.</div></sc-if>
+</div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:baseline;justify-content:space-between"><div style="display:flex;align-items:baseline;gap:10px"><h2 style="margin:0;font-size:15px;font-weight:700">On the desk</h2><span style="font-size:11px;color:#67746f">{{ presenceLine }}</span></div><button onClick="{{ goLanes }}" style="border:0;background:transparent;font-size:11px;color:#2456d6;font-weight:600;cursor:pointer">Agent lanes →</button></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px">
+<sc-for list="{{ sessions }}" as="s" hint-placeholder-count="6">
+<button onClick="{{ s.on }}" style="display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 11px;border:1px solid {{ s.cardBd }};border-radius:9px;background:{{ s.cardBg }};text-align:left;cursor:pointer" style-hover="border-color:#9ba8c9">
+<span style="display:inline-grid;place-items:center;width:28px;height:28px;border-radius:999px;background:{{ s.c }};color:#fff;font-size:9px;font-weight:700;box-shadow:0 0 0 3px {{ s.ring }}">{{ s.ini }}</span>
+<span style="min-width:0;display:flex;flex-direction:column"><span style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.name }}</span><span style="font-size:11px;color:#67746f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.doing }}</span></span>
+<span style="text-align:right;display:flex;flex-direction:column"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:{{ s.ageFg }}">{{ s.age }}</span><span style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:{{ s.ageFg }}">{{ s.stateLabel }}</span></span>
+</button>
+</sc-for>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{ isLedger }}" hint-placeholder-val="{{ true }}">
+<section style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+<div style="display:flex;align-items:baseline;gap:10px"><h2 style="margin:0;font-size:19px;font-weight:700;letter-spacing:-.02em">{{ ledgerTitle }}</h2><span style="font-size:13px;color:#87918d">{{ ledgerCount }}</span></div>
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+<input value="{{ q }}" onChange="{{ onQ }}" placeholder="Title, owner, next step or path" style="width:240px;height:32px;padding:0 10px;border:1px solid #bfc4bc;border-radius:7px;background:#fffefa;font-size:12px;color:#182329;outline:0" style-focus="border-color:#6681ce;box-shadow:0 0 0 3px rgba(36,86,214,.13)">
+<select value="{{ of }}" onChange="{{ onOwner }}" style="height:32px;padding:0 8px;border:1px solid #bfc4bc;border-radius:7px;background:#fffefa;font-size:12px;color:#182329"><sc-for list="{{ ownerOpts }}" as="o" hint-placeholder-count="3"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select>
+<button onClick="{{ openNewTask }}" style="height:32px;padding:0 12px;border:1px solid #2456d6;border-radius:7px;background:#2456d6;color:#fff;font-size:12px;font-weight:600;cursor:pointer" style-hover="background:#1e49b7">Add task</button>
+</div>
+</div>
+<div style="display:flex;gap:2px;padding:2px;border:1px solid #c3c1b8;border-radius:8px;background:#fbfaf5;align-self:flex-start">
+<sc-for list="{{ sfTabs }}" as="tb" hint-placeholder-count="6"><button onClick="{{ tb.on }}" style="height:26px;padding:0 10px;border:0;border-radius:6px;background:{{ tb.bg }};color:{{ tb.fg }};font-size:11px;font-weight:600;cursor:pointer">{{ tb.label }} <span style="opacity:.6">{{ tb.n }}</span></button></sc-for>
+</div>
+<div style="border:1px solid #c3c1b8;border-radius:10px;background:#fbfaf5;box-shadow:0 10px 28px rgba(24,35,41,.08);overflow:hidden">
+<div style="display:grid;grid-template-columns:{{ ledCols }};gap:12px;padding:8px 14px 8px 17px;border-bottom:1px solid #d8d5ca;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#87918d"><span>Status</span><span>Task · next step</span><span>Owner</span><sc-if value="{{ wideLed }}" hint-placeholder-val="{{ true }}"><span>Claims</span><span>Evidence</span><span style="text-align:right">Upd.</span></sc-if></div>
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;background:#e9e5dc;border-bottom:1px solid #d8d5ca;color:#4d5955;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase"><span>{{ g.label }}</span><span style="display:grid;place-items:center;min-width:22px;height:18px;border-radius:999px;background:#d8d3c8;color:#3d4945;font-size:10px">{{ g.n }}</span></div>
+<sc-for list="{{ g.rows }}" as="t" hint-placeholder-count="2">
+<div onClick="{{ t.on }}" style="position:relative;display:grid;grid-template-columns:{{ ledCols }};gap:12px;align-items:center;padding:{{ rowPad }};padding-left:17px;border-bottom:1px solid #e4e1d8;background:{{ t.rowBg }};box-shadow:{{ t.rowSh }};cursor:pointer" style-hover="background:#f6f4ee">
+<span style="position:absolute;left:0;top:0;bottom:0;width:3px;background:{{ t.s.bar }}"></span>
+<span><span style="display:inline-block;border:1px solid {{ t.s.bd }};border-radius:5px;padding:3px 6px;font-size:9px;font-weight:800;letter-spacing:.035em;background:{{ t.s.bg }};color:{{ t.s.fg }}">{{ t.status }}</span></span>
+<div style="min-width:0;display:flex;flex-direction:column;gap:3px"><div style="display:flex;align-items:center;gap:6px;min-width:0"><span style="font-size:13px;font-weight:600;color:#1f2f35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.title }}</span><sc-if value="{{ t.prLabel }}"><span style="flex:none;border:1px solid #e9c2bc;border-radius:5px;padding:1px 5px;font-size:9px;font-weight:800;text-transform:uppercase;color:#8e372e;background:#f7e4e0">{{ t.prLabel }}</span></sc-if><sc-if value="{{ t.crossover }}"><span style="flex:none;font-family:'IBM Plex Mono',monospace;font-size:9px;padding:1px 5px;border-radius:5px;background:#e7edff;color:#2049ad">{{ t.crossover }}</span></sc-if></div><div style="font-size:12px;color:#4d5955;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.nextText }}</div></div>
+<span style="display:inline-flex;align-items:center;gap:5px;min-width:0;max-width:100%;justify-self:start;color:{{ t.o.c }};background:{{ t.o.bg }};border-radius:999px;padding:2px 8px 2px 3px;font-size:10px;font-weight:700;line-height:1"><span style="flex:none;display:inline-grid;place-items:center;min-width:16px;height:16px;border-radius:999px;background:{{ t.o.c }};color:#fff;font-size:7px">{{ t.o.ini }}</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.o.short }}</span></span>
+<sc-if value="{{ wideLed }}" hint-placeholder-val="{{ true }}"><div style="min-width:0;display:flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#596b65"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.path0 }}</span><sc-if value="{{ t.more }}"><span style="flex:none;font-size:10px;color:#87918d">{{ t.more }}</span></sc-if></div>
+<span style="justify-self:start;font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:{{ t.evBg }};color:{{ t.evFg }};white-space:nowrap">{{ t.evText }}</span>
+<span style="text-align:right;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#87918d">{{ t.updated }}</span></sc-if>
+</div>
+</sc-for>
+</sc-for>
+<sc-if value="{{ ledgerEmpty }}"><div style="padding:24px;text-align:center;font-size:12px;color:#67746f">No tasks match this view. Clear a filter or add a task.</div></sc-if>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{ isLanes }}">
+<section style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:baseline;gap:10px"><h2 style="margin:0;font-size:19px;font-weight:700;letter-spacing:-.02em">Agent lanes</h2><span style="font-size:12px;color:#67746f">05:00 – 07:00 PKT · click a bar to open the task</span></div>
+<div style="display:grid;grid-template-columns:230px minmax(0,1fr);border:1px solid #c3c1b8;border-radius:10px;overflow:hidden;background:#fbfaf5">
+<div style="padding:8px 12px;background:#ece8de;border-bottom:1px solid #d8d5ca;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#67746f">Session</div>
+<div style="position:relative;height:31px;background:#ece8de;border-bottom:1px solid #d8d5ca;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#67746f"><sc-for list="{{ ticks }}" as="k" hint-placeholder-count="5"><span style="position:absolute;top:9px;left:{{ k.l }};transform:translateX(-50%)">{{ k.label }}</span></sc-for></div>
+<sc-for list="{{ lanes }}" as="r" hint-placeholder-count="6">
+<div style="display:flex;align-items:center;gap:9px;padding:0 12px;height:58px;border-bottom:1px solid #e4e1d8;opacity:{{ r.op }}"><span style="flex:none;display:inline-grid;place-items:center;width:26px;height:26px;border-radius:999px;background:{{ r.s.c }};color:#fff;font-size:9px;font-weight:700">{{ r.s.ini }}</span><div style="min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.s.name }}</div><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#87918d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.s.branch }}</div></div></div>
+<div style="position:relative;height:58px;border-bottom:1px solid #e4e1d8;background-image:linear-gradient(90deg,#ece8de 1px,transparent 1px);background-size:25% 100%">
+<sc-for list="{{ r.bars }}" as="b" hint-placeholder-count="1"><div onClick="{{ b.on }}" title="{{ b.label }}" style="position:absolute;top:{{ b.top }};height:{{ b.h }};left:{{ b.l }};width:{{ b.w }};border:1px {{ b.bs }} {{ b.bd }};background:{{ b.bg }};border-radius:5px;display:flex;align-items:center;padding:0 8px;overflow:hidden;font-size:11px;font-weight:600;color:{{ b.fg }};white-space:nowrap;cursor:pointer">{{ b.label }}</div></sc-for>
+<sc-for list="{{ r.marks }}" as="m" hint-placeholder-count="1"><span title="{{ m.tip }}" style="position:absolute;top:4px;left:{{ m.l }};transform:translateX(-50%);display:inline-grid;place-items:center;width:16px;height:16px;border-radius:{{ m.rad }};background:{{ m.bg }};color:#fff;font-size:9px;font-weight:800;box-shadow:0 0 0 2px #fbfaf5">{{ m.sym }}</span></sc-for>
+<div style="position:absolute;top:0;bottom:0;left:87.5%;width:2px;background:#2456d6"></div>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:11px;color:#67746f;align-items:center">
+<span style="display:flex;align-items:center;gap:6px"><span style="width:18px;height:10px;border-radius:3px;border:1px solid #2456d6;background:#e7edff"></span>Claim held</span>
+<span style="display:flex;align-items:center;gap:6px"><span style="width:18px;height:10px;border-radius:3px;border:1px dashed #c17b2c;background:#f8ead6"></span>Blocked / queued</span>
+<span style="display:flex;align-items:center;gap:6px"><span style="width:18px;height:10px;border-radius:3px;border:1px dashed #9aa6a0;background:#ecefec"></span>Stale owner</span>
+<span style="display:flex;align-items:center;gap:6px"><span style="display:inline-grid;place-items:center;width:14px;height:14px;border-radius:3px;background:#3e745a;color:#fff;font-size:8px;font-weight:800">D</span>Deploy</span>
+<span style="display:flex;align-items:center;gap:6px"><span style="display:inline-grid;place-items:center;width:14px;height:14px;border-radius:50%;background:#4e5ea2;color:#fff;font-size:8px;font-weight:800">?</span>Question / approval</span>
+<span style="display:flex;align-items:center;gap:6px"><span style="display:inline-grid;place-items:center;width:14px;height:14px;border-radius:3px;background:#a44339;color:#fff;font-size:8px;font-weight:800">✕</span>Refused claim</span>
+<span style="display:flex;align-items:center;gap:6px"><span style="width:2px;height:14px;background:#2456d6"></span>Now</span>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">
+<sc-for list="{{ caught }}" as="c" hint-placeholder-count="3"><div style="padding:11px 12px;border:1px solid #d8d5ca;border-radius:9px;background:#fbfaf5;display:flex;flex-direction:column;gap:4px"><div style="display:flex;justify-content:space-between;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:{{ c.fg }}"><span>{{ c.type }}</span><span style="font-family:'IBM Plex Mono',monospace;letter-spacing:0;color:#87918d">{{ c.t }}</span></div><div style="font-size:12px;line-height:1.45;color:#2d3b42">{{ c.text }}</div></div></sc-for>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{ isClaims }}">
+<section style="display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:20px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+<div style="display:flex;align-items:baseline;gap:10px"><h2 style="margin:0;font-size:19px;font-weight:700;letter-spacing:-.02em">Claims</h2><span style="font-size:12px;color:#67746f">{{ claimsLine }}</span></div>
+<div style="border:1px solid #c3c1b8;border-radius:10px;overflow:hidden;background:#fbfaf5">
+<sc-for list="{{ claims }}" as="n" hint-placeholder-count="10">
+<div onClick="{{ n.on }}" style="display:grid;grid-template-columns:minmax(0,1fr) 170px 70px;gap:10px;align-items:center;height:36px;padding:0 12px;border-bottom:1px solid #ece8de;background:{{ n.bg }};cursor:pointer" style-hover="background:#f6f4ee">
+<span style="font-family:'IBM Plex Mono',monospace;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ n.p }}</span>
+<span style="justify-self:start;display:inline-flex;align-items:center;gap:5px;color:{{ n.o.c }};background:{{ n.o.bg }};border-radius:999px;padding:2px 8px 2px 3px;font-size:10px;font-weight:700;line-height:1"><span style="display:inline-grid;place-items:center;min-width:16px;height:16px;border-radius:999px;background:{{ n.o.c }};color:#fff;font-size:7px">{{ n.o.ini }}</span>{{ n.o.short }}</span>
+<span style="text-align:right;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;color:{{ n.noteFg }}">{{ n.note }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+<aside style="display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#67746f">Would it conflict?</div>
+<input value="{{ cq }}" onChange="{{ onCq }}" placeholder="path/to/file.ts or service:name" style="height:36px;padding:0 10px;border:1px solid #bfc4bc;border-radius:7px;background:#fffefa;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#182329;outline:0" style-focus="border-color:#6681ce;box-shadow:0 0 0 3px rgba(36,86,214,.13)">
+<div style="padding:11px 12px;border:1px solid {{ cr.bd }};border-radius:8px;background:{{ cr.bg }};font-size:12px;line-height:1.5;color:{{ cr.fg }}"><strong style="font-weight:700">{{ cr.head }}</strong> {{ cr.text }}</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#67746f">Service lanes</div>
+<div style="padding:12px;border:1px solid #d8d5ca;border-radius:9px;background:#fbfaf5;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600">service:web-prod</span><span style="font-size:10px;color:#67746f">prod 352e463 · 17m</span></div>
+<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+<sc-for list="{{ laneQueue }}" as="q" hint-placeholder-count="3"><span style="display:inline-flex;align-items:center;gap:5px;color:{{ q.o.c }};background:{{ q.o.bg }};border-radius:999px;padding:2px 8px 2px 3px;font-size:10px;font-weight:700;line-height:1;box-shadow:{{ q.sh }}"><span style="display:inline-grid;place-items:center;min-width:16px;height:16px;border-radius:999px;background:{{ q.o.c }};color:#fff;font-size:7px">{{ q.o.ini }}</span>{{ q.o.short }} · {{ q.label }}</span></sc-for>
+</div>
+<div style="font-size:11px;color:#67746f">When it frees, the head gets YOUR TURN and 15 min to claim.</div>
+</div>
+<div style="padding:12px;border:1px solid #d8d5ca;border-radius:9px;background:#fbfaf5;display:flex;justify-content:space-between;align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600">service:worker-deploy</span><span style="font-size:11px;color:#2f694e;font-weight:600">Free · last 0c81d2e</span></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#67746f">Held in other projects</div>
+<div style="padding:10px 12px;border:1px solid #e6c99e;border-radius:9px;background:#fdf6ea;display:flex;justify-content:space-between;align-items:center;font-size:11px"><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600">service:tender-api</span><span style="color:#8a5619;font-weight:600">pallet-level · t-c21e</span></div>
+</div>
+</aside>
+</section>
+</sc-if>
+
+<sc-if value="{{ isInbox }}">
+<section style="display:flex;flex-direction:column;gap:12px;max-width:860px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+<div style="display:flex;align-items:baseline;gap:10px"><h2 style="margin:0;font-size:19px;font-weight:700;letter-spacing:-.02em">Inbox</h2><span style="font-size:13px;color:#87918d">{{ unreadLine }}</span></div>
+<div style="display:flex;gap:8px;align-items:center">
+<div style="display:flex;gap:2px;padding:2px;border:1px solid #c3c1b8;border-radius:8px;background:#fbfaf5"><sc-for list="{{ inboxTabs }}" as="tb" hint-placeholder-count="3"><button onClick="{{ tb.on }}" style="height:26px;padding:0 10px;border:0;border-radius:6px;background:{{ tb.bg }};color:{{ tb.fg }};font-size:11px;font-weight:600;cursor:pointer">{{ tb.label }}</button></sc-for></div>
+<button onClick="{{ ackAll }}" style="height:32px;padding:0 12px;border:1px solid #b9c0b8;border-radius:7px;background:#fffefa;color:#30444a;font-size:12px;font-weight:600;cursor:pointer">Acknowledge all broadcasts</button>
+<button onClick="{{ openNewMessage }}" style="height:32px;padding:0 12px;border:1px solid #2456d6;border-radius:7px;background:#2456d6;color:#fff;font-size:12px;font-weight:600;cursor:pointer">Write message</button>
+</div>
+</div>
+<div style="border:1px solid #c3c1b8;border-radius:10px;background:#fbfaf5;overflow:hidden">
+<sc-for list="{{ inbox }}" as="m" hint-placeholder-count="4">
+<div style="position:relative;display:flex;flex-direction:column;gap:6px;padding:13px 16px 13px 18px;border-bottom:1px solid #e4e1d8;background:{{ m.bg }}">
+<span style="position:absolute;left:0;top:12px;bottom:12px;width:3px;border-radius:3px;background:{{ m.w.c }}"></span>
+<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="display:inline-flex;align-items:center;gap:5px;color:{{ m.w.c }};background:{{ m.w.bg }};border-radius:999px;padding:2px 8px 2px 3px;font-size:10px;font-weight:700;line-height:1"><span style="display:inline-grid;place-items:center;min-width:16px;height:16px;border-radius:999px;background:{{ m.w.c }};color:#fff;font-size:7px">{{ m.w.ini }}</span>{{ m.w.name }}</span><span style="font-size:10px;color:#87918d;font-weight:700">to</span><span style="font-size:11px;color:#2d3b42;font-weight:600">{{ m.toLabel }}</span><sc-if value="{{ m.kindLabel }}"><span style="padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;text-transform:uppercase;background:#fff1d6;color:#8c570c">{{ m.kindLabel }}</span></sc-if><sc-if value="{{ m.taskTitle }}"><button onClick="{{ m.openTask }}" style="border:0;padding:2px 6px;border-radius:5px;background:#edf1eb;font-size:10px;color:#52635e;cursor:pointer">Task: {{ m.taskTitle }}</button></sc-if></div><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#87918d">{{ m.at }}</span></div>
+<div style="font-size:13px;line-height:1.5;color:#2d3d42;white-space:pre-wrap">{{ m.body }}</div>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:10px;font-weight:700;color:{{ m.rcFg }}">{{ m.receipt }}</span><div style="display:flex;gap:6px"><button onClick="{{ m.reply }}" style="height:26px;padding:0 9px;border:1px solid #b9c0b8;border-radius:6px;background:#fffefa;color:#30444a;font-size:11px;font-weight:600;cursor:pointer">Reply</button><sc-if value="{{ m.canAck }}"><button onClick="{{ m.ack }}" style="height:26px;padding:0 9px;border:1px solid #b9c0b8;border-radius:6px;background:#fffefa;color:#30444a;font-size:11px;font-weight:600;cursor:pointer">Acknowledge</button></sc-if></div></div>
+</div>
+</sc-for>
+<sc-if value="{{ inboxEmpty }}"><div style="padding:24px;text-align:center;font-size:12px;color:#67746f">Inbox clear.</div></sc-if>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{ isLessons }}">
+<section style="display:flex;flex-direction:column;gap:12px;max-width:860px">
+<div style="display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:baseline;gap:10px"><h2 style="margin:0;font-size:19px;font-weight:700;letter-spacing:-.02em">Lessons</h2><span style="font-size:12px;color:#67746f">Shared memory. Agents get these when they claim the paths.</span></div><button onClick="{{ openLesson }}" style="height:32px;padding:0 12px;border:1px solid #2456d6;border-radius:7px;background:#2456d6;color:#fff;font-size:12px;font-weight:600;cursor:pointer">Add lesson</button></div>
+<div style="border:1px solid #c3c1b8;border-radius:10px;background:#fbfaf5;overflow:hidden">
+<sc-for list="{{ lessons }}" as="l" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:13px 16px;border-bottom:1px solid #e4e1d8"><div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:13px;line-height:1.5;color:#2d3d42">{{ l.body }}</div><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:11px;color:#67746f"><span>{{ l.author }} · {{ l.scope }}</span><sc-for list="{{ l.paths }}" as="p" hint-placeholder-count="1"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;padding:1px 6px;border-radius:4px;background:#ece8de;color:#4d5955">{{ p }}</span></sc-for></div></div><button onClick="{{ l.archive }}" style="align-self:start;height:26px;padding:0 9px;border:1px solid #b9c0b8;border-radius:6px;background:#fffefa;color:#30444a;font-size:11px;font-weight:600;cursor:pointer">Archive</button></div></sc-for>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{ isActivity }}">
+<section style="display:flex;flex-direction:column;gap:12px;max-width:860px">
+<div style="display:flex;align-items:baseline;gap:10px"><h2 style="margin:0;font-size:19px;font-weight:700;letter-spacing:-.02em">Activity</h2><span style="font-size:12px;color:#67746f">Audit trail. Your actions from this session appear at the top.</span></div>
+<div style="border:1px solid #c3c1b8;border-radius:10px;background:#fbfaf5;overflow:hidden">
+<sc-for list="{{ events }}" as="e" hint-placeholder-count="6"><div style="display:grid;grid-template-columns:48px 130px 150px minmax(0,1fr);gap:10px;align-items:center;padding:9px 16px;border-bottom:1px solid #e4e1d8;font-size:12px"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#87918d">{{ e.t }}</span><span style="justify-self:start;padding:2px 6px;border:1px solid #d9e1d7;border-radius:5px;background:#eef1ea;color:#45554e;font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase">{{ e.kind }}</span><span style="font-weight:600;color:{{ e.w.c }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ e.w.name }}</span><span style="color:#2d3b42">{{ e.text }}</span></div></sc-for>
+</div>
+</section>
+</sc-if>
+
+</div>
+</main>
+
+<sc-if value="{{ showAside }}" hint-placeholder-val="{{ true }}">
+<aside style="min-width:0;overflow:auto;display:flex;flex-direction:column;background:#fbfaf5;border-left:1px solid #d8d5ca;position:{{ asPos }};top:{{ asTop }};right:0;bottom:0;width:{{ asW }};z-index:40;box-shadow:{{ asSh }}">
+<div style="padding:18px 20px 14px;border-bottom:1px solid #e4e1d8;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;white-space:nowrap"><sc-if value="{{ isDrawer }}"><button onClick="{{ closeDrawer }}" aria-label="Close" style="border:1px solid #b9c0b8;border-radius:6px;background:#fffefa;color:#30444a;font-size:12px;width:26px;height:26px;cursor:pointer">✕</button></sc-if><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#87918d">{{ sel.id }}</span><span style="display:inline-block;border:1px solid {{ sel.s.bd }};border-radius:5px;padding:3px 6px;font-size:9px;font-weight:800;background:{{ sel.s.bg }};color:{{ sel.s.fg }}">{{ sel.status }}</span><sc-if value="{{ sel.prLabel }}"><span style="border:1px solid #e9c2bc;border-radius:5px;padding:3px 6px;font-size:9px;font-weight:800;text-transform:uppercase;color:#8e372e;background:#f7e4e0">{{ sel.prLabel }}</span></sc-if><sc-if value="{{ sel.pausedByYou }}"><span style="font-size:10px;font-weight:700;color:#8a5619">paused by you</span></sc-if><span style="margin-left:auto;font-size:11px;color:#87918d">updated {{ sel.updated }}</span></div>
+<h3 style="margin:0;font-size:18px;line-height:1.25;font-weight:700;letter-spacing:-.015em;text-wrap:pretty">{{ sel.title }}</h3>
+<div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#67746f;flex-wrap:wrap"><span style="display:inline-flex;align-items:center;gap:5px;color:{{ sel.o.c }};background:{{ sel.o.bg }};border-radius:999px;padding:2px 8px 2px 3px;font-size:10px;font-weight:700;line-height:1"><span style="display:inline-grid;place-items:center;min-width:16px;height:16px;border-radius:999px;background:{{ sel.o.c }};color:#fff;font-size:7px">{{ sel.o.ini }}</span>{{ sel.o.name }}</span><span style="font-family:'IBM Plex Mono',monospace">{{ sel.o.branch }}</span></div>
+<div style="display:flex;gap:6px;flex-wrap:wrap">
+<sc-for list="{{ sel.buttons }}" as="b" hint-placeholder-count="5"><button onClick="{{ b.on }}" style="white-space:nowrap;height:28px;padding:0 10px;border:1px solid {{ b.bd }};border-radius:7px;background:{{ b.bg }};color:{{ b.fg }};font-size:11px;font-weight:600;cursor:pointer" style-hover="filter:brightness(.95)">{{ b.label }}</button></sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:18px;padding:16px 20px 24px">
+<div style="padding:11px 12px;border:1px solid {{ sel.nextBd }};border-radius:8px;background:{{ sel.nextBg }}"><div style="font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:{{ sel.nextFg }};margin-bottom:4px">{{ sel.nextLabel }}</div><div style="font-size:13px;line-height:1.45;color:#1f2f35">{{ sel.nextText }}</div></div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;justify-content:space-between;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#67746f"><span>Claims</span><span style="letter-spacing:0;text-transform:none;font-weight:500;color:#87918d">{{ sel.claimNote }}</span></div>
+<div style="border:1px solid #dddcd3;border-radius:8px;background:#fffdf8">
+<sc-for list="{{ sel.claims }}" as="c" hint-placeholder-count="2"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;border-bottom:1px solid #ece8de;font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ c.pfg }};text-decoration:{{ c.dec }}"><span style="overflow-wrap:anywhere">{{ c.p }}</span><span style="flex:none;font-family:'Aptos','IBM Plex Sans',sans-serif;font-size:10px;font-weight:600;color:{{ c.fg }}">{{ c.note }}</span></div></sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;justify-content:space-between;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#67746f"><span>Evidence</span><span style="letter-spacing:0;text-transform:none;font-weight:600;color:{{ sel.evFg }}">{{ sel.evText }}</span></div>
+<div style="display:grid;grid-template-columns:86px minmax(0,1fr);border:1px solid #dddcd3;border-radius:8px;background:#fffdf8;font-size:11px">
+<sc-for list="{{ sel.checks }}" as="k" hint-placeholder-count="3"><span style="padding:6px 10px;border-bottom:1px solid #ece8de;color:#87918d">{{ k.k }}</span><span style="padding:6px 10px;border-bottom:1px solid #ece8de;font-family:'IBM Plex Mono',monospace;color:#2d3b42;overflow-wrap:anywhere">{{ k.v }}</span></sc-for>
+</div>
+</div>
+<sc-if value="{{ sel.lesson }}"><div style="padding:10px 12px;border:1px solid #e6c99e;border-radius:8px;background:#fdf6ea;font-size:12px;line-height:1.45;color:#4d3a17"><div style="font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#8a5619;margin-bottom:3px">Lesson on these paths</div>{{ sel.lesson }}</div></sc-if>
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#67746f">Journal</div>
+<div style="display:flex;flex-direction:column;border-left:1px solid #d8d5ca">
+<sc-for list="{{ sel.journal }}" as="j" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:40px 70px minmax(0,1fr);gap:6px;padding:5px 0 5px 10px;font-size:11px"><span style="font-family:'IBM Plex Mono',monospace;color:#87918d">{{ j.t }}</span><span style="font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#234675;padding-top:1px">{{ j.k }}</span><span style="color:#2d3b42">{{ j.text }}</span></div></sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#67746f">Discussion</div>
+<sc-for list="{{ sel.talk }}" as="m" hint-placeholder-count="2"><div style="display:flex;gap:8px;align-items:flex-start"><span style="flex:none;display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:{{ m.w.c }};color:#fff;font-size:8px;font-weight:700">{{ m.w.ini }}</span><div style="min-width:0"><div style="font-size:11px;color:#67746f"><strong style="color:#213137;font-weight:600">{{ m.w.name }}</strong> · {{ m.at }} · <span style="color:{{ m.rcFg }}">{{ m.receipt }}</span></div><div style="font-size:12px;line-height:1.45;color:#2d3d42;white-space:pre-wrap">{{ m.body }}</div></div></div></sc-for>
+<sc-if value="{{ sel.noTalk }}"><div style="font-size:11px;color:#87918d">No comments yet.</div></sc-if>
+<div style="display:flex;flex-direction:column;gap:6px;padding:8px;border:1px solid #bfc4bc;border-radius:8px;background:#fffefa">
+<textarea value="{{ comment }}" onChange="{{ onComment }}" onKeyDown="{{ onCommentKey }}" placeholder="{{ sel.commentPh }}" rows="2" style="border:0;outline:0;resize:vertical;background:transparent;font-size:12px;color:#182329;min-height:38px"></textarea>
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:10px;color:#87918d">⌘⏎ to send · a receipt confirms reading, not approval</span><button onClick="{{ sendComment }}" style="height:26px;padding:0 10px;border:1px solid #2456d6;border-radius:6px;background:#2456d6;color:#fff;font-size:11px;font-weight:600;cursor:pointer">Send</button></div>
+</div>
+</div>
+</div>
+</aside>
+</sc-if>
+</div>
+
+<sc-if value="{{ pal }}">
+<div onClick="{{ closeAll }}" style="position:fixed;inset:0;z-index:50;background:rgba(26,38,40,.58);display:flex;justify-content:center;align-items:flex-start;padding-top:12vh">
+<div onClick="{{ stop }}" style="width:min(620px,calc(100vw - 32px));border:1px solid #d3d0c7;border-radius:12px;background:#fbfaf5;box-shadow:0 26px 100px rgba(29,42,50,.34);overflow:hidden">
+<input ref="{{ palRef }}" value="{{ palQ }}" onChange="{{ onPalQ }}" placeholder="Type a command, task, path or agent…" style="width:100%;height:50px;padding:0 16px;border:0;border-bottom:1px solid #e4e1d8;background:transparent;font-size:15px;color:#182329;outline:0">
+<div style="padding:6px;max-height:380px;overflow:auto">
+<sc-for list="{{ cmds }}" as="p" hint-placeholder-count="6">
+<button onClick="{{ p.run }}" onMouseEnter="{{ p.hover }}" style="width:100%;display:grid;grid-template-columns:70px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 10px;border:0;border-radius:7px;background:{{ p.bg }};text-align:left;cursor:pointer"><span style="font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#87918d">{{ p.group }}</span><span style="min-width:0;display:flex;flex-direction:column"><span style="font-size:13px;font-weight:600;color:#182329;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.label }}</span><span style="font-size:11px;color:#67746f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.sub }}</span></span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#87918d">{{ p.key }}</span></button>
+</sc-for>
+<sc-if value="{{ cmdsEmpty }}"><div style="padding:18px;text-align:center;font-size:12px;color:#67746f">No match.</div></sc-if>
+</div>
+<div style="display:flex;justify-content:space-between;padding:8px 16px;border-top:1px solid #e4e1d8;background:#f5f1e8;font-size:10px;color:#67746f"><span>↑↓ move · ⏎ run · esc close</span><span>Recorded as you (rohan)</span></div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ dlg }}">
+<div onClick="{{ closeAll }}" style="position:fixed;inset:0;z-index:60;background:rgba(26,38,40,.58);display:flex;justify-content:center;align-items:center;padding:16px">
+<div onClick="{{ stop }}" style="width:min(540px,100%);border:1px solid #d3d0c7;border-radius:12px;padding:22px;background:#fbfaf5;box-shadow:0 26px 100px rgba(29,42,50,.34);display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0;font-size:17px;font-weight:700">{{ dlg.title }}</h2><button onClick="{{ closeAll }}" style="border:0;background:transparent;font-size:16px;color:#67746f;cursor:pointer">✕</button></div>
+<sc-if value="{{ dlg.hint }}"><div style="padding:10px 12px;border:1px solid #ccd8f1;border-radius:8px;background:#e7edff;color:#40506f;font-size:12px;line-height:1.45">{{ dlg.hint }}</div></sc-if>
+<sc-for list="{{ dlg.fields }}" as="f" hint-placeholder-count="2">
+<label style="display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:700;color:#5e6d68">{{ f.label }}
+<sc-if value="{{ f.isText }}"><input value="{{ f.value }}" onChange="{{ f.on }}" style="height:38px;padding:0 10px;border:1px solid #bfc4bc;border-radius:7px;background:#fffefa;font-size:13px;font-weight:400;color:#182329;outline:0;font-family:{{ f.font }}" style-focus="border-color:#6681ce;box-shadow:0 0 0 3px rgba(36,86,214,.13)"></sc-if>
+<sc-if value="{{ f.isArea }}"><textarea value="{{ f.value }}" onChange="{{ f.on }}" rows="4" style="padding:9px 10px;border:1px solid #bfc4bc;border-radius:7px;background:#fffefa;font-size:13px;font-weight:400;color:#182329;outline:0;resize:vertical;font-family:{{ f.font }}" style-focus="border-color:#6681ce;box-shadow:0 0 0 3px rgba(36,86,214,.13)"></textarea></sc-if>
+<sc-if value="{{ f.isSelect }}"><select value="{{ f.value }}" onChange="{{ f.on }}" style="height:38px;padding:0 8px;border:1px solid #bfc4bc;border-radius:7px;background:#fffefa;font-size:13px;font-weight:400;color:#182329"><sc-for list="{{ f.options }}" as="o" hint-placeholder-count="3"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select></sc-if>
+<sc-if value="{{ f.isReadonly }}"><div style="padding:9px 10px;border:1px solid #bfc4bc;border-radius:7px;background:#f5f1e8;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:400;color:#182329;overflow-wrap:anywhere">{{ f.value }}</div></sc-if>
+</label>
+</sc-for>
+<sc-if value="{{ dlgError }}"><div style="font-size:12px;color:#a44339">{{ dlgError }}</div></sc-if>
+<div style="display:flex;justify-content:flex-end;gap:9px"><button onClick="{{ closeAll }}" style="height:34px;padding:0 14px;border:1px solid #b9c0b8;border-radius:7px;background:#fffefa;color:#30444a;font-size:12px;font-weight:600;cursor:pointer">Cancel</button><button onClick="{{ submitDlg }}" style="height:34px;padding:0 14px;border:1px solid #2456d6;border-radius:7px;background:#2456d6;color:#fff;font-size:12px;font-weight:600;cursor:pointer">{{ dlg.save }}</button></div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ toast }}">
+<div style="position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:70;display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:9px;background:#182329;color:#fbfaf5;font-size:12px;box-shadow:0 10px 28px rgba(24,35,41,.25);max-width:calc(100vw - 32px)"><span>{{ toast }}</span><sc-if value="{{ canUndo }}"><button onClick="{{ undo }}" style="border:0;background:transparent;color:#e8bb78;font-size:12px;font-weight:700;cursor:pointer">Undo</button></sc-if></div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;comfortable&quot;,&quot;compact&quot;],&quot;default&quot;:&quot;comfortable&quot;,&quot;tsType&quot;:&quot;'comfortable'|'compact'&quot;},&quot;apiBase&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Live wiring&quot;},&quot;project&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;media-intelligence&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Live wiring&quot;}}">
+class Component extends DCLogic {
+  static A = { rohan:{c:'#4e5ea2',bg:'#e7e9f6'}, claude:{c:'#a55c36',bg:'#f4e7de'}, codex:{c:'#176e76',bg:'#e1f0ef'}, none:{c:'#687777',bg:'#ecefec'} };
+  static ST = {
+    RUNNING:{fg:'#2049ad',bg:'#e7edff',bd:'#cbd7fa',bar:'#2456d6'}, BLOCKED:{fg:'#8a5619',bg:'#f8ead6',bd:'#e6c99e',bar:'#c17b2c'},
+    PAUSED:{fg:'#8a5619',bg:'#f8ead6',bd:'#e6c99e',bar:'#c17b2c'}, QUEUED:{fg:'#58645c',bg:'#edf0eb',bd:'#d0d6cf',bar:'#8b948f'},
+    DONE:{fg:'#2f694e',bg:'#e5f0e8',bd:'#c6ddce',bar:'#3e745a'}
+  };
+  // Mock board. Shape mirrors /api/state (tasks, sessions, messages, approvals, action_items, lessons, events, task_logs).
+  static seed(){
+    const ses=(id,kind,name,short,branch,age,stale)=>({id,kind,name,short,branch,age,stale:!!stale});
+    return {
+      sessions:[ses('wa','claude','Claude · wa-card','wa-card','feat/wa-card-renderer','40s'),ses('cc','claude','Claude · capture-v2','capture-v2','feat/capture-v2-worklist','1m'),
+        ses('gs','codex','Codex supervisor + Luna','supervisor','feat/gsd-onboarding','3m'),ses('ma','codex','Codex mapper A','mapper A','feat/tenders','12m'),
+        ses('pm','codex','Codex · pie-menu','pie-menu','feat/pie-menu-dial','8m'),ses('al','codex','Codex · alerting','alerting','fix/alert-dedupe','6h 12m',true)],
+      tasks:[
+        {id:'t-4e1a',status:'RUNNING',priority:'high',title:'WhatsApp card renderer → headless Chrome',next_step:'Deploy once Chrome launch fails soft on the target box',owner:'wa',resources:['src/lib/render/whatsapp-card.ts','src/lib/render/chrome.ts','service:web-prod'],evidence:'checked',evText:'✓ 42 passed',updated:'40s',checks:[['command','pnpm vitest run src/lib/render'],['exit code','0'],['tests','42 passed · 0 failed'],['commit','4e1a9b2'],['deployment','not yet — holds service:web-prod']],lesson:'Chrome is not installed on the prod box by default. The renderer must fail soft and fall back to the static card. — Codex supervisor'},
+        {id:'t-9c07',status:'RUNNING',priority:'normal',title:'CCTV interface rewrite',next_step:'Merge new base 352e463, then re-run e2e',owner:'cc',resources:['app/(dash)/cctv/','components/cctv/'],evidence:'',evText:'—',updated:'1m',checks:[['command','not reported'],['base','1a7e0c2 (prod is 352e463)']]},
+        {id:'t-77d0',status:'RUNNING',priority:'normal',title:'gsd-onboarding',next_step:'Capture owner DONE acknowledgment read',owner:'gs',resources:['.planning/','AGENTS.md','CLAUDE.md','docs/engineering/','scripts/gsd'],evidence:'checked',evText:'✓ drift 0',updated:'3m',checks:[['command','scripts/gsd/drift-check'],['exit code','0'],['drift','0 files']]},
+        {id:'t-2b33',status:'BLOCKED',priority:'normal',title:'Government-tender connector',next_step:'Waiting on your decision: ship the scheduler dormant or enabled',owner:'ma',resources:['src/connectors/tenders/','jobs/scheduler.ts'],evidence:'checked',evText:'✓ 31 passed',updated:'25m',crossover:'x-3f9a',checks:[['command','pytest tests/connectors/tenders'],['exit code','0'],['tests','31 passed · 0 failed'],['scheduler','off by default']],lesson:'A connector that ships dormant must say so in its completion evidence. — Rohan'},
+        {id:'t-51f8',status:'PAUSED',priority:'normal',title:'Alert dedupe window',next_step:'Owner silent 6h — reassign, close, or let it resume',owner:'al',resources:['src/alerts/dedupe.ts'],evidence:'failing',evText:'✕ 2 failed',updated:'6h',checks:[['command','pnpm test src/alerts'],['exit code','1'],['tests','14 passed · 2 failed']]},
+        {id:'t-a310',status:'QUEUED',priority:'normal',title:'Pie menu dial',next_step:'Queued for service:web-prod behind Claude · wa-card',owner:'pm',resources:['components/pie-menu/'],evidence:'',evText:'—',updated:'8m',checks:[['command','not reported']]},
+        {id:'t-0f12',status:'DONE',priority:'normal',title:'Security fix: signed media URLs',summary:'Deployed 352e463 · 118 tests passed',owner:'wa',resources:['src/lib/media/sign.ts','middleware.ts'],evidence:'checked',evText:'✓ 118 passed',updated:'17m',checks:[['command','pnpm test'],['exit code','0'],['tests','118 passed · 0 failed'],['commit','352e463'],['deployment','deployed · web-prod']]},
+        {id:'t-6d44',status:'DONE',priority:'normal',title:'Capture-v2 worklist drift check',summary:'Six capture-v2 files re-synced from the published commit',owner:'cc',resources:['capture-v2/'],evidence:'checked',evText:'✓ 6 files',updated:'52m',checks:[['command','scripts/drift capture-v2'],['exit code','0']]}
+      ],
+      task_logs:{
+        't-4e1a':[['06:41','claim','Took service:web-prod as queue head'],['06:38','progress','Launch failure now falls back to static PNG card'],['06:34','question','Supervisor: does Chrome exist on target? Answered: yes, /usr/bin/chromium'],['06:30','claim','Claimed 2 paths · 1 lesson handed over']],
+        't-9c07':[['06:31','question','Asked: merge new base before continuing?'],['06:22','refused','Blocked Codex · pie-menu from components/cctv/'],['05:20','claim','Claimed 2 directories']],
+        't-2b33':[['06:20','approval','Requested: ship scheduler dormant or enabled?'],['06:02','crossover','Joined x-3f9a with pallet-level'],['05:30','claim','Claimed 2 paths']],
+        't-51f8':[['00:33','progress','Last check-in from owner'],['00:10','claim','Claimed src/alerts/dedupe.ts']],
+        't-77d0':[['06:42','progress','Drift checker: six capture-v2 files identified'],['05:00','claim','Claimed 5 paths']],
+        't-a310':[['06:30','queue','Joined queue for service:web-prod'],['06:22','refused','Claim on components/cctv/ refused'],['06:05','claim','Claimed components/pie-menu/']],
+        't-0f12':[['06:28','deploy','Deployed 352e463 to web-prod'],['06:26','done','118 passed · claims released']],
+        't-6d44':[['05:53','done','Six files re-synced']]
+      },
+      messages:[
+        {id:'m1',sender:'cc',recipient:'rohan',kind:'question',question_status:'open',task_id:'t-9c07',at:'06:31',body:'CCTV rewrite branched off 1a7e0c2; prod is now 352e463. Merge before continuing?',acks:[]},
+        {id:'m2',sender:'gs',recipient:'wa',kind:'message',task_id:'t-4e1a',at:'06:33',body:'Before you ship: confirm launch failure is soft. I don’t want alerts silently stopping.',acks:['wa']},
+        {id:'m3',sender:'wa',recipient:'gs',kind:'message',task_id:'t-4e1a',at:'06:38',body:'Confirmed. Fallback covered by render.fallback.test.ts, exit 0.',acks:['gs']},
+        {id:'m4',sender:'wa',recipient:'all',kind:'deploy',task_id:'t-0f12',at:'06:28',body:'DEPLOY DONE — web-prod at 352e463 (signed media URLs). Anyone branched before this: merge the new base before you deploy.',acks:['gs','ma']},
+        {id:'m5',sender:'gs',recipient:'all',kind:'message',task_id:'',at:'05:02',body:'Project Desk is live for media-intelligence. Register, check in with include=["inbox","counts"], and claim literal paths before editing.',acks:['wa','cc','ma','pm']}
+      ],
+      approvals:[{id:'ap1',title:'Ship the tender scheduler dormant or enabled on deploy?',options:['Ship dormant','Enable on deploy'],requester:'ma',task_id:'t-2b33',status:'pending',at:'06:20'}],
+      action_items:[{id:'ai1',body:'Rotate MEDIA_URL_SECRET on staging',assignee:'human',task_id:'t-0f12',author:'wa',status:'open'},{id:'ai2',body:'Confirm the CDN purge finished',assignee:'human',task_id:'t-0f12',author:'wa',status:'open'}],
+      refusals:[{id:'rf1',session:'pm',path:'components/cctv/',holder:'cc',task_id:'t-9c07',at:'06:22',status:'open'}],
+      lessons:[
+        {id:'l1',body:'Chrome is not installed on the prod box by default. The renderer must fail soft and fall back to the static card.',paths:['src/lib/render/'],author:'Codex supervisor',scope:'project'},
+        {id:'l2',body:'A connector that ships dormant must say so in its completion evidence, or the next morning is spent wondering why no alerts arrived.',paths:['src/connectors/'],author:'Rohan',scope:'global'},
+        {id:'l3',body:'Brackets in Next.js route names are literal in claims: claim app/(dash)/cctv/, not app/*/cctv.',paths:['app/'],author:'Claude · capture-v2',scope:'project'}
+      ],
+      events:[
+        {t:'06:41',kind:'claim',actor:'wa',text:'Claimed service:web-prod'},{t:'06:38',kind:'task update',actor:'wa',text:'t-4e1a progress logged'},
+        {t:'06:31',kind:'question',actor:'cc',text:'Asked Rohan about merging 352e463'},{t:'06:28',kind:'deploy',actor:'wa',text:'web-prod → 352e463'},
+        {t:'06:22',kind:'claim refused',actor:'pm',text:'components/cctv/ held by capture-v2'},{t:'06:20',kind:'approval',actor:'ma',text:'Requested decision on tender scheduler'}
+      ]
+    };
+  }
+  state = { view:'command', sel:'t-4e1a', cursor:0, attF:'all', q:'', sf:'active', of:'all', inboxF:'you', pal:false, palQ:'', palI:0, dlg:null, form:{}, dlgError:'', toast:'', undo:null, comment:'', cq:'components/cctv/player.tsx', data:Component.seed(), live:false, liveError:'', w:(typeof window!=='undefined'?window.innerWidth:1440), drawer:false };
+
+  componentDidMount(){
+    this._key=e=>this.onKey(e); window.addEventListener('keydown',this._key);
+    this._rs=()=>this.setState({w:window.innerWidth}); window.addEventListener('resize',this._rs); this._rs();
+    if(this.props.apiBase){ this.pull(); this._poll=setInterval(()=>this.pull(),5000); }
+  }
+  componentWillUnmount(){ window.removeEventListener('resize',this._rs); window.removeEventListener('keydown',this._key); clearInterval(this._poll); clearTimeout(this._tt); }
+
+  // ---- live wiring (optional): set apiBase to e.g. "" when served from the desk itself, or "http://127.0.0.1:7331"
+  async pull(){
+    try{ const r=await fetch(`${this.props.apiBase}/api/state?project=${encodeURIComponent(this.props.project||'media-intelligence')}`); if(!r.ok) throw Error(r.status);
+      const board=await r.json(); this.setState({data:this.fromBoard(board),live:true,liveError:''});
+    }catch(err){ this.setState({live:false,liveError:String(err.message||err)}); }
+  }
+  post(action,data){
+    if(!this.props.apiBase) return;
+    fetch(`${this.props.apiBase}/api/action`,{method:'POST',headers:{'Content-Type':'application/json','X-Project-Desk':'dashboard'},body:JSON.stringify({project:this.props.project||'media-intelligence',action,data})})
+      .then(r=>r.json().then(j=>{ if(!r.ok) throw Error(j.error||'Unable to save'); this.pull(); }))
+      .catch(err=>this.flash('Server refused: '+err.message));
+  }
+  fromBoard(b){
+    const hm=iso=>iso?new Date(iso).toTimeString().slice(0,5):'';
+    const ago=iso=>{ if(!iso) return ''; const m=Math.round((Date.now()-new Date(iso))/6e4); return m<1?'now':m<60?m+'m':Math.floor(m/60)+'h'; };
+    const ev=b.evidence||{};
+    return {
+      sessions:(b.sessions||[]).filter(s=>!s.imported).map(s=>({id:s.id,kind:s.kind||'codex',name:s.name,short:(s.name||'').split('·').pop().trim().slice(0,14),branch:s.branch,age:ago(s.last_seen),stale:!!s.stale})),
+      tasks:(b.tasks||[]).map(t=>({id:t.id,status:t.status,priority:t.priority,title:t.title,next_step:t.next_step,summary:t.summary,owner:t.owner||'',resources:t.resources||[],version:t.version,human_paused:t.human_paused,
+        evidence:ev[t.id]?.level||'',evText:ev[t.id]?(ev[t.id].level==='checked'?'✓ checked':'✕ failing'):'—',updated:ago(t.updated),
+        checks:[['validation',t.validation||'not recorded'],['commit',t.commit_ref||'not recorded'],['deployment',t.deployment||'—']]})),
+      task_logs:Object.fromEntries(Object.entries(b.task_logs||{}).map(([k,v])=>[k,v.map(e=>[hm(e.created),e.kind,e.entry])])),
+      messages:(b.messages||[]).map(m=>({id:m.id,sender:m.sender,recipient:m.recipient,kind:m.kind||'message',question_status:m.question_status,task_id:m.task_id||'',at:hm(m.created),body:m.body,acks:(m.acknowledgments||[]).map(a=>a.session_id==='rohan'?'rohan':a.session_id)})),
+      approvals:(b.approvals||[]).map(a=>({id:a.id,title:a.title,options:a.options||[],requester:a.requester,task_id:a.task_id,status:a.status,at:hm(a.created)})),
+      action_items:(b.action_items||[]).map(i=>({id:i.id,body:i.body,assignee:i.assignee==='rohan'?'human':i.assignee,task_id:i.task_id,author:i.author,status:i.status})),
+      refusals:(b.events||[]).filter(e=>e.kind==='claim.refused').slice(0,5).map(e=>({id:'rf'+e.seq,session:e.actor,path:(e.data?.resources||[])[0]||'',holder:e.data?.holder||'',task_id:e.data?.task_id||'',at:hm(e.created),status:'open'})),
+      lessons:(b.lessons||[]).map(l=>({id:l.id,body:l.body,paths:l.paths||[],author:l.author_name,scope:l.scope})),
+      events:(b.events||[]).slice().sort((x,y)=>y.seq-x.seq).slice(0,60).map(e=>({t:hm(e.created),kind:e.kind.replaceAll('.',' '),actor:e.actor,text:''}))
+    };
+  }
+
+  // ---- helpers
+  now(){ return new Date().toTimeString().slice(0,5); }
+  flash(msg,undo){ clearTimeout(this._tt); this.setState({toast:msg,undo:undo||null}); this._tt=setTimeout(()=>this.setState({toast:'',undo:null}),4200); }
+  who(id){ const s=this.state.data.sessions.find(x=>x.id===id); const A=Component.A;
+    if(id==='rohan'||id==='human') return {...A.rohan,ini:'RZ',name:'Rohan (you)',short:'you',branch:''};
+    if(!s) return {...A.none,ini:'··',name:id?id:'Unassigned',short:id?id:'unassigned',branch:''};
+    return {...A[s.kind]||A.none,ini:s.kind==='claude'?'CL':'CX',name:s.name,short:s.short,branch:s.branch}; }
+  task(id){ return this.state.data.tasks.find(t=>t.id===id); }
+  mut(fn,msg,server,withUndo){
+    const prev=this.state.data; const d=JSON.parse(JSON.stringify(prev)); fn(d);
+    this.setState({data:d}); if(server) this.post(server[0],server[1]);
+    this.flash(msg, withUndo&&!this.props.apiBase ? ()=>this.setState({data:prev,toast:'Undone.'}) : null);
+  }
+  log(d,taskId,k,text,actor){ const t=this.now(); if(taskId){ (d.task_logs[taskId]=d.task_logs[taskId]||[]).unshift([t,k,text]); const tk=d.tasks.find(x=>x.id===taskId); if(tk) tk.updated='now'; } d.events.unshift({t,kind:k,actor:actor||'rohan',text}); }
+  base(t){ return {task_id:t.id,version:t.version}; }
+
+  // ---- domain actions (server action names = static/app.js mutate())
+  decide(ap,option,note){ this.mut(d=>{ const a=d.approvals.find(x=>x.id===ap.id); a.status='decided'; const t=d.tasks.find(x=>x.id===a.task_id);
+      if(t){ t.status='RUNNING'; t.next_step=`Decision: ${option}. Proceed and record it in the completion evidence.`; }
+      d.messages.unshift({id:'m'+Date.now(),sender:'rohan',recipient:a.requester,kind:'decision',task_id:a.task_id,at:this.now(),body:`Decision: ${option}${note?' — '+note:''}`,acks:[]});
+      this.log(d,a.task_id,'decision',`Rohan decided: ${option}`); },
+    `Decision “${option}” sent to ${this.who(ap.requester).name}.`,['approval.decide',{approval_id:ap.id,decision:option,...(note?{note}:{})}],true); }
+  reply(msgId,body){ this.mut(d=>{ const m=d.messages.find(x=>x.id===msgId); if(m){ m.question_status='answered'; if(!m.acks.includes('rohan')) m.acks.push('rohan');
+      d.messages.unshift({id:'m'+Date.now(),sender:'rohan',recipient:m.sender,kind:'message',task_id:m.task_id,at:this.now(),body,acks:[]}); this.log(d,m.task_id,'reply','Rohan answered: '+body.slice(0,60)); } },
+    'Reply sent.',['message',{recipient:(this.state.data.messages.find(x=>x.id===msgId)||{}).sender||'all',body,reply_to:msgId}]); }
+  ack(ids){ this.mut(d=>ids.forEach(id=>{ const m=d.messages.find(x=>x.id===id); if(m&&!m.acks.includes('rohan')) m.acks.push('rohan'); }), ids.length>1?`${ids.length} messages acknowledged.`:'Acknowledged.', null);
+    ids.forEach(id=>this.post('ack',{message_id:id})); }
+  tick(ids){ this.mut(d=>ids.forEach(id=>{ const i=d.action_items.find(x=>x.id===id); if(i) i.status='done'; }), `${ids.length} action point${ids.length>1?'s':''} ticked.`, null, true);
+    ids.forEach(id=>this.post('action.resolve',{item_id:id,status:'done'})); }
+  setStatus(t,action){ const paused=action==='pause';
+    this.mut(d=>{ const x=d.tasks.find(y=>y.id===t.id); x.human_paused=paused; if(paused) x.status='PAUSED'; else if(x.status==='PAUSED') x.status='RUNNING'; this.log(d,t.id,action,paused?'Paused by Rohan · claims stay reserved':'Pause lifted by Rohan'); },
+      paused?'Paused. Claims stay reserved; the agent sees it on next check-in.':'Pause lifted. The agent resumes on its next check-in.',[action,this.base(t)],true); }
+  refusal(r,kind){ this.mut(d=>{ const x=d.refusals.find(y=>y.id===r.id); x.status='done';
+      if(kind==='handoff') d.messages.unshift({id:'m'+Date.now(),sender:'rohan',recipient:r.holder,kind:'message',task_id:r.task_id,at:this.now(),body:`${this.who(r.session).name} needs ${r.path}. Offer a handoff when you reach a stopping point.`,acks:[]});
+      this.log(d,r.task_id,kind==='queue'?'queue':kind==='handoff'?'handoff ask':'dismiss',kind==='queue'?`${this.who(r.session).name} queued for ${r.path}`:kind==='handoff'?`Asked ${this.who(r.holder).name} to hand over ${r.path}`:'Refusal dismissed'); },
+      kind==='queue'?`${this.who(r.session).name} will get YOUR TURN when ${r.path} frees.`:kind==='handoff'?`Handoff request sent to ${this.who(r.holder).name}.`:'Dismissed.', kind==='handoff'?['message',{recipient:r.holder,body:`Handoff requested for ${r.path}`,task_id:r.task_id}]:null); }
+
+  // ---- dialogs
+  openDlg(kind,ctx){
+    const s=this.state.data.sessions.filter(x=>!x.stale).map(x=>({v:x.id,l:x.name+' · '+x.branch}));
+    const D={
+      reassign:{title:'Reassign ownership',hint:'The receiving session takes the claim now. The previous owner is told on its next check-in.',save:'Reassign',fields:[['session_id','Receiving session','select',s],['reason','Reason / agreed handoff','area']]},
+      priority:{title:'Set task priority',save:'Save',fields:[['priority','Priority','select',['normal','high','urgent'].map(v=>({v,l:v}))]]},
+      close:{title:'Close task and release its claims',save:'Close task',fields:[['summary','Outcome or cancellation reason','area']]},
+      reopen:{title:'Reopen & reassign completed task',hint:'Prior completion evidence stays attached. Reopening reacquires the recorded paths.',save:'Reopen',fields:[['session_id','Receiving session','select',s],['next_step','What should happen next','area']]},
+      reply:{title:'Reply',save:'Send reply',fields:[['body','Message','area']]},
+      other:{title:'Another answer',save:'Send decision',fields:[['decision','Your decision','text'],['note','Note for the agent','area']]},
+      newTask:{title:'Add a task',save:'Add task',fields:[['title','Task title','text'],['assigned_to','Assign to','select',[{v:'',l:'Either agent'},{v:'codex',l:'Codex'},{v:'claude',l:'Claude'}]],['resources','Files or directories (one per line)','area','mono'],['next_step','Expected outcome / next step','area']]},
+      message:{title:'Write to the team',save:'Send',fields:[['recipient','Recipient','select',[{v:'all',l:'Everyone'},{v:'codex',l:'All Codex sessions'},{v:'claude',l:'All Claude sessions'},...s]],['body','Message','area']]},
+      lesson:{title:'Add a lesson for every agent',save:'Save lesson',fields:[['body','Lesson (a few sentences, with the why)','area'],['paths','Paths it applies to (one per line)','area','mono'],['scope','Scope','select',[{v:'project',l:'This project'},{v:'global',l:'Every project'}]]]},
+      crossover:{title:'Cross over into another project',hint:'The other project joins with its own task in its own repo. Paste the line into that project’s agent.',save:'Done',fields:[['line','Paste into pallet-level’s Claude or Codex','readonly']]},
+      connect:{title:'Connect agents · media-intelligence',save:'Done',fields:[['line','Paste into Claude or Codex, in this repo','readonly'],['cmd','Or run in the repo folder','readonly']]}
+    }[kind];
+    const form={}; D.fields.forEach(([k,,type,opts])=>{ form[k]=type==='select'?(opts[0]?.v??''):''; });
+    if(kind==='priority') form.priority=ctx.priority||'normal';
+    if(kind==='crossover') form.line=`Join Project Desk crossover x-${ctx.id.slice(2)} from http://127.0.0.1:7331/x/x-${ctx.id.slice(2)}`;
+    if(kind==='connect'){ form.line='Set up Project Desk for this repo from http://127.0.0.1:7331/p/media-intelligence/onboard'; form.cmd='./desk join media-intelligence'; }
+    this.setState({dlg:{kind,ctx,...D},form,dlgError:'',pal:false});
+  }
+  submitDlg(){
+    const {dlg,form}=this.state; if(!dlg) return; const ctx=dlg.ctx, need=k=>{ if(!String(form[k]||'').trim()){ this.setState({dlgError:'Please fill in every field.'}); throw 0; } };
+    try{
+      if(dlg.kind==='reassign'){ need('reason'); const to=form.session_id;
+        this.mut(d=>{ const t=d.tasks.find(x=>x.id===ctx.id); t.owner=to; if(t.status==='PAUSED') t.status='RUNNING'; t.human_paused=false; d.refusals.forEach(r=>{}); this.log(d,t.id,'reassign',`Reassigned to ${this.who(to).name}: ${form.reason}`); },
+          `Reassigned to ${this.who(to).name}.`,['reassign',{...this.base(ctx),session_id:to,reason:form.reason}],true); }
+      else if(dlg.kind==='priority'){ this.mut(d=>{ const t=d.tasks.find(x=>x.id===ctx.id); t.priority=form.priority; this.log(d,t.id,'priority','Priority set to '+form.priority); },'Priority set to '+form.priority+'.',['priority',{...this.base(ctx),priority:form.priority}]); }
+      else if(dlg.kind==='close'){ need('summary'); this.mut(d=>{ const t=d.tasks.find(x=>x.id===ctx.id); t.status='DONE'; t.summary=form.summary; this.log(d,t.id,'close','Closed by Rohan · claims released: '+form.summary); },`Closed. ${ctx.resources.length} claim${ctx.resources.length>1?'s':''} released.`,['close',{...this.base(ctx),summary:form.summary}],true); }
+      else if(dlg.kind==='reopen'){ need('next_step'); this.mut(d=>{ const t=d.tasks.find(x=>x.id===ctx.id); t.status='RUNNING'; t.owner=form.session_id; t.next_step=form.next_step; this.log(d,t.id,'reopen','Reopened for '+this.who(form.session_id).name); },'Reopened and paths re-claimed.',['reopen',{...this.base(ctx),session_id:form.session_id,next_step:form.next_step}]); }
+      else if(dlg.kind==='reply'){ need('body'); this.reply(ctx.id,form.body); }
+      else if(dlg.kind==='other'){ need('decision'); this.decide(ctx,form.decision,form.note); }
+      else if(dlg.kind==='newTask'){ need('title'); need('resources'); const res=form.resources.split('\n').map(x=>x.trim()).filter(Boolean);
+        const clash=this.state.data.tasks.find(t=>t.status!=='DONE'&&t.resources.some(p=>res.some(q=>this.overlap(p,q))));
+        if(clash){ this.setState({dlgError:`Refused: overlaps ${clash.id} (${clash.title}). Overlapping claims are refused, not merged.`}); return; }
+        const id='t-'+Math.random().toString(16).slice(2,6);
+        this.mut(d=>{ d.tasks.unshift({id,status:'QUEUED',priority:'normal',title:form.title,next_step:form.next_step,owner:'',resources:res,evidence:'',evText:'—',updated:'now',checks:[['command','not reported']]}); this.log(d,id,'create','Task added by Rohan'); },'Task added to the queue.',['create',{title:form.title,assigned_to:form.assigned_to,resources:res,next_step:form.next_step}]);
+        this.setState({sel:id}); }
+      else if(dlg.kind==='message'){ need('body'); this.mut(d=>{ d.messages.unshift({id:'m'+Date.now(),sender:'rohan',recipient:form.recipient,kind:'message',task_id:'',at:this.now(),body:form.body,acks:[]}); this.log(d,'','message','Message to '+form.recipient); },'Message sent.',['message',{recipient:form.recipient,body:form.body}]); }
+      else if(dlg.kind==='lesson'){ need('body'); const paths=(form.paths||'').split('\n').map(x=>x.trim()).filter(Boolean);
+        this.mut(d=>{ d.lessons.unshift({id:'l'+Date.now(),body:form.body,paths,author:'Rohan',scope:form.scope}); },'Lesson saved. Agents get it when they claim those paths.',['lesson.create',{body:form.body,paths:form.paths,tags:'',scope:form.scope}]); }
+      else if(dlg.kind==='crossover'){ this.post('crossover.start',{task_id:ctx.id,invite:['pallet-level'],note:''}); this.flash('Crossover link ready.'); }
+      this.setState({dlg:null,form:{},dlgError:''});
+    }catch(e){ if(e!==0) throw e; }
+  }
+  overlap(a,b){ if(a===b) return true; if(a.endsWith('/')&&b.startsWith(a)) return true; if(b.endsWith('/')&&a.startsWith(b)) return true; return false; }
+  sendComment(){ const body=this.state.comment.trim(); if(!body) return; const t=this.task(this.state.sel);
+    this.mut(d=>{ d.messages.unshift({id:'m'+Date.now(),sender:'rohan',recipient:t.owner||'all',kind:'message',task_id:t.id,at:this.now(),body,acks:[]}); this.log(d,t.id,'comment','Rohan commented'); },'Comment sent to '+this.who(t.owner).name+'.',['message',{recipient:t.owner||'all',body,task_id:t.id}]);
+    this.setState({comment:''}); }
+
+  // ---- keyboard
+  onKey(e){
+    const s=this.state, k=e.key;
+    if((e.metaKey||e.ctrlKey)&&k.toLowerCase()==='k'){ e.preventDefault(); this.setState({pal:!s.pal,palQ:'',palI:0}); return; }
+    if(k==='Escape'){ if(!s.pal&&!s.dlg&&s.drawer){ this.setState({drawer:false}); return; } this.setState({pal:false,dlg:null}); return; }
+    if(s.pal){ const n=(this._cmds||[]).length; if(k==='ArrowDown'){e.preventDefault();this.setState({palI:Math.min(n-1,s.palI+1)});} else if(k==='ArrowUp'){e.preventDefault();this.setState({palI:Math.max(0,s.palI-1)});} else if(k==='Enter'){e.preventDefault(); const c=(this._cmds||[])[s.palI]; if(c) c.run();} return; }
+    if(s.dlg){ if(k==='Enter'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); this.submitDlg(); } return; }
+    const tag=(e.target.tagName||'').toLowerCase(); if(tag==='input'||tag==='textarea'||tag==='select') return;
+    if(k==='/'){ e.preventDefault(); this.setState({pal:true,palQ:'',palI:0}); return; }
+    const att=this._att||[];
+    if(s.view==='command'&&att.length){
+      if(k==='j'){ this.setState({cursor:Math.min(att.length-1,s.cursor+1)}); return; }
+      if(k==='k'){ this.setState({cursor:Math.max(0,s.cursor-1)}); return; }
+      const cur=att[Math.min(s.cursor,att.length-1)];
+      if(/^[1-9]$/.test(k)){ const b=cur.actions[Number(k)-1]; if(b) b.on(); return; }
+      if(k==='e'){ const b=cur.actions.find(x=>x.key==='E'); if(b) b.on(); return; }
+      if(k==='Enter'&&cur.task_id){ this.setState({sel:cur.task_id}); return; }
+    }
+    if(s.view==='command'||s.view==='tasks'){ const list=this._visible||[]; const i=list.findIndex(t=>t.id===s.sel);
+      if(k==='ArrowDown'&&list.length){ e.preventDefault(); this.setState({sel:list[Math.min(list.length-1,i+1)].id}); }
+      if(k==='ArrowUp'&&list.length){ e.preventDefault(); this.setState({sel:list[Math.max(0,i-1)].id}); } }
+  }
+
+  renderVals(){
+    const st=this.state, d=st.data, ST=Component.ST, W=id=>this.who(id), view=st.view, stop=e=>e.stopPropagation();
+    const btn=(label,on,kind,key)=>({label,on:e=>{ if(e&&e.stopPropagation) e.stopPropagation(); on&&on(); },key:key||'',bg:kind==='p'?'#2456d6':kind==='d'?'#fff5f3':'#fffefa',fg:kind==='p'?'#fff':kind==='d'?'#a44339':'#30444a',bd:kind==='p'?'#2456d6':kind==='d'?'#e9c2bc':'#b9c0b8'});
+    const go=v=>()=>this.setState({view:v,pal:false});
+    const staleIds=new Set(d.sessions.filter(s=>s.stale).map(s=>s.id));
+    // attention queue
+    let attAll=[];
+    d.approvals.filter(a=>a.status==='pending').forEach(a=>attAll.push({id:a.id,kind:'approval',type:'Approval',fg:'#4e5ea2',who:W(a.requester),task_id:a.task_id,title:a.title,meta:`${(this.task(a.task_id)||{}).title||''} · ${a.at}`,
+      actions:[...a.options.map((o,i)=>btn(o,()=>this.decide(a,o),i===0?'p':'',String(i+1))),btn('Other…',()=>this.openDlg('other',a),'',String(a.options.length+1))]}));
+    d.messages.filter(m=>m.kind==='question'&&m.question_status==='open'&&m.recipient==='rohan').forEach(m=>attAll.push({id:m.id,kind:'question',type:'Question',fg:'#176e76',who:W(m.sender),task_id:m.task_id,title:m.body,meta:`${(this.task(m.task_id)||{}).title||''} · ${m.at}`,
+      actions:[btn('Yes, go ahead',()=>this.reply(m.id,'Yes, go ahead.'),'p','1'),btn('Reply…',()=>this.openDlg('reply',m),'','2')]}));
+    d.tasks.filter(t=>t.status!=='DONE'&&staleIds.has(t.owner)).forEach(t=>attAll.push({id:'st-'+t.id,kind:'stale',type:'Stale claim',fg:'#a44339',who:W(t.owner),task_id:t.id,title:`${t.title} — owner silent ${d.sessions.find(s=>s.id===t.owner).age}, still holds ${t.resources.join(', ')}`,meta:'Claims never expire on their own',
+      actions:[btn('Reassign…',()=>this.openDlg('reassign',t),'','1'),btn('Close…',()=>this.openDlg('close',t),'d','2')]}));
+    d.refusals.filter(r=>r.status==='open').forEach(r=>attAll.push({id:r.id,kind:'refused',type:'Refused claim',fg:'#8a5619',who:W(r.session),task_id:r.task_id,title:`Tried to claim ${r.path} — held by ${W(r.holder).name}`,meta:`Refused, not merged · ${r.at}`,
+      actions:[btn('Queue it',()=>this.refusal(r,'queue'),'','1'),btn('Ask handoff',()=>this.refusal(r,'handoff'),'','2'),btn('Dismiss',()=>this.refusal(r,'dismiss'),'','3')]}));
+    const openItems=d.action_items.filter(i=>i.status==='open'&&i.assignee==='human'); const byTask={}; openItems.forEach(i=>(byTask[i.task_id]=byTask[i.task_id]||[]).push(i));
+    Object.entries(byTask).forEach(([tid,items])=>attAll.push({id:'ai-'+tid,kind:'action',type:'Action points',fg:'#3e745a',who:W(items[0].author),task_id:tid,title:items.map(i=>i.body).join(' · '),meta:`${items.length} left for you on ${(this.task(tid)||{}).title||'no task'}`,
+      actions:[btn(items.length>1?'Tick all':'Tick',()=>this.tick(items.map(i=>i.id)),'','E')]}));
+    const att=attAll.filter(a=>st.attF==='all'||a.kind===st.attF); this._att=att;
+    const cursor=Math.min(st.cursor,Math.max(0,att.length-1));
+    const attRows=att.map((a,i)=>({...a,bg:i===cursor?'#fffdf8':'#fbfaf5',sh:i===cursor&&view==='command'?'inset 3px 0 0 #2456d6':'none',focus:()=>this.setState({cursor:i,sel:a.task_id||st.sel})}));
+    const attTabs=[['all','All'],['approval','Approvals'],['question','Questions'],['stale','Stale'],['refused','Refused'],['action','Action points']].map(([k,l])=>{const n=k==='all'?attAll.length:attAll.filter(a=>a.kind===k).length;return {label:n?`${l} ${n}`:l,on:()=>this.setState({attF:k,cursor:0}),bg:st.attF===k?'#182329':'transparent',fg:st.attF===k?'#fff':'#67746f'};});
+    // sessions
+    const doing=s=>{ const t=d.tasks.find(x=>x.owner===s.id&&x.status!=='DONE'); if(!t) return 'No open task'; return t.status==='BLOCKED'?'Waiting on you · '+t.title:t.title; };
+    const sessions=d.sessions.map(s=>{ const w=W(s.id), t=d.tasks.find(x=>x.owner===s.id&&x.status!=='DONE'), wait=t&&t.status==='BLOCKED';
+      return {...w,age:s.age,doing:doing(s),on:()=>t&&this.setState({sel:t.id,drawer:true}),cardBg:s.stale?'#f5f1e8':'#fbfaf5',cardBd:s.stale?'#d8d5ca':wait?'#e6c99e':'#d8d5ca',ring:s.stale?'#ece8de':w.bg,ageFg:s.stale?'#a44339':wait?'#8a5619':'#3e745a',stateLabel:s.stale?'stale':wait?'waiting':'live'}; });
+    const liveN=d.sessions.filter(s=>!s.stale).length, staleN=d.sessions.length-liveN;
+    // ledger
+    const evc=t=>t.evidence==='checked'?{evBg:'#e5f0e8',evFg:'#2f694e'}:t.evidence==='failing'?{evBg:'#f7e4e0',evFg:'#a44339'}:{evBg:'transparent',evFg:'#87918d'};
+    const row=t=>({...t,...evc(t),s:ST[t.status]||ST.QUEUED,o:W(t.owner),path0:t.resources[0]||'—',more:t.resources.length>1?'+'+(t.resources.length-1):'',prLabel:t.priority&&t.priority!=='normal'?t.priority:'',crossover:t.crossover||'',
+      nextText:t.status==='DONE'?(t.summary||'No completion summary'):(t.next_step||'No next step recorded'),on:()=>this.setState({sel:t.id,drawer:true}),rowBg:st.sel===t.id?'#eef2fd':'#fffdf8',rowSh:st.sel===t.id?'inset 0 0 0 1px #9ba8c9':'none'});
+    const q=st.q.trim().toLowerCase();
+    const match=t=>(st.of==='all'||t.owner===st.of||(st.of==='unassigned'&&!t.owner))&&(!q||JSON.stringify([t.title,t.id,W(t.owner).name,t.resources,t.next_step,t.summary]).toLowerCase().includes(q));
+    const sfOk=t=>st.sf==='all'||(st.sf==='active'?t.status!=='DONE':t.status===st.sf);
+    const pool=d.tasks.filter(match), visible=(view==='command'?pool:pool.filter(sfOk));
+    const grp=(label,f)=>{ const rows=visible.filter(f).map(row); return rows.length?{label,n:rows.length,rows}:null; };
+    const groups=[grp('Running',t=>t.status==='RUNNING'),grp('Blocked & paused',t=>t.status==='BLOCKED'||t.status==='PAUSED'),grp('Queued',t=>t.status==='QUEUED'),grp('Done',t=>t.status==='DONE')].filter(Boolean);
+    this._visible=groups.flatMap(g=>g.rows);
+    const sfTabs=[['active','Active'],['all','All'],['RUNNING','Running'],['BLOCKED','Blocked'],['PAUSED','Paused'],['QUEUED','Queued'],['DONE','Done']].map(([k,l])=>({label:l,n:pool.filter(t=>k==='all'||(k==='active'?t.status!=='DONE':t.status===k)).length,on:()=>this.setState({sf:k}),bg:st.sf===k?'#182329':'transparent',fg:st.sf===k?'#fff':'#67746f'}));
+    const ownerOpts=[{v:'all',l:'All owners'},{v:'unassigned',l:'Unassigned'},...d.sessions.map(s=>({v:s.id,l:s.name}))];
+    // focus pane
+    const t=this.task(st.sel)||d.tasks[0]; const selRow=row(t);
+    const heldBy=p=>d.tasks.find(x=>x.id!==t.id&&x.status!=='DONE'&&x.resources.some(r=>this.overlap(r,p)));
+    const claims=t.resources.map(p=>{ const done=t.status==='DONE'; const note=done?'released':p.startsWith('service:')?'deploy lane':p.endsWith('/')?'dir · descendants':'file';
+      return {p,note,fg:p.startsWith('service:')&&!done?'#8a5619':'#87918d',pfg:done?'#87918d':'#2d3b42',dec:done?'line-through':'none'}; });
+    const talk=d.messages.filter(m=>m.task_id===t.id).slice().reverse().map(m=>({w:W(m.sender),at:m.at,body:m.body,...this.rc(m)}));
+    const B=[];
+    if(t.status==='DONE') B.push(btn('Reopen & reassign',()=>this.openDlg('reopen',t),'p'));
+    else { B.push(t.human_paused?btn('Resume',()=>this.setStatus(t,'resume'),'p'):btn('Pause',()=>this.setStatus(t,'pause')));
+      B.push(btn('Reassign',()=>this.openDlg('reassign',t)),btn('Set priority',()=>this.openDlg('priority',t)),btn('Cross over',()=>this.openDlg('crossover',t)),btn('Close with note',()=>this.openDlg('close',t),'d')); }
+    const blocked=t.status==='BLOCKED'||t.status==='PAUSED';
+    const sel={...selRow,nextLabel:t.status==='DONE'?'Outcome':blocked?'Blocked · next step':'Next step',nextBg:t.status==='DONE'?'#eef5f0':blocked?'#fdf6ea':'#f3f6fe',nextBd:t.status==='DONE'?'#c6ddce':blocked?'#e6c99e':'#cbd7fa',nextFg:t.status==='DONE'?'#2f694e':blocked?'#8a5619':'#2049ad',
+      claims,claimNote:t.status==='DONE'?'released on DONE':'refused to others while held',checks:(t.checks||[]).map(([k,v])=>({k,v})),lesson:t.lesson||'',pausedByYou:!!t.human_paused,
+      journal:(d.task_logs[t.id]||[]).map(([tt,k,text])=>({t:tt,k,text})),talk,noTalk:!talk.length,buttons:B,commentPh:`Comment to ${W(t.owner).name}…`};
+    // claims view
+    const held=d.tasks.filter(x=>x.status!=='DONE').flatMap(x=>x.resources.map(p=>({p,x}))).sort((a,b)=>a.p.localeCompare(b.p));
+    const claimsRows=held.map(({p,x})=>{ const stale=staleIds.has(x.owner), ref=d.refusals.find(r=>r.path===p&&r.status==='open');
+      return {p,o:W(x.owner),note:stale?'stale':ref?'refused '+ref.at:x.id,noteFg:stale||ref?'#a44339':'#87918d',bg:stale||ref?'#fdf3f1':'#fbfaf5',on:()=>this.setState({sel:x.id,view:'tasks'})}; });
+    const cq=st.cq.trim(); const hit=cq?held.find(({p})=>this.overlap(p,cq)):null;
+    const cr=!cq?{head:'',text:'Type a path to check before you plan around it.',bg:'#fbfaf5',bd:'#d8d5ca',fg:'#67746f'}:hit?{head:'Held',text:`by ${W(hit.x.owner).name} through ${hit.p===cq?'the claim':'the directory claim'} ${hit.p} on ${hit.x.id} (${hit.x.title}). A claim here would be refused.`,bg:'#f7e4e0',bd:'#e9c2bc',fg:'#5b241d'}:{head:'Free',text:'No open task holds this path. A claim would succeed.',bg:'#e5f0e8',bd:'#c6ddce',fg:'#2f694e'};
+    const laneHolder=d.tasks.find(x=>x.status!=='DONE'&&x.resources.includes('service:web-prod'));
+    const laneQueue=[...(laneHolder?[{o:W(laneHolder.owner),label:'holding',sh:`0 0 0 2px ${W(laneHolder.owner).c}`}]:[]),{o:W('pm'),label:'next',sh:'none'},{o:W('cc'),label:'queued',sh:'none'}];
+    // inbox
+    const forYou=m=>['rohan','all','human'].includes(m.recipient);
+    const unread=d.messages.filter(m=>forYou(m)&&!m.acks.includes('rohan'));
+    const inboxList=d.messages.filter(m=>st.inboxF==='all'?true:st.inboxF==='unread'?forYou(m)&&!m.acks.includes('rohan'):forYou(m)||m.sender==='rohan');
+    const inbox=inboxList.map(m=>({...m,w:W(m.sender),toLabel:m.recipient==='all'?'everyone':W(m.recipient).name,kindLabel:m.kind!=='message'?(m.kind+(m.question_status?' · '+m.question_status:'')):'',taskTitle:(this.task(m.task_id)||{}).title||'',
+      openTask:()=>this.setState({sel:m.task_id,view:'tasks'}),reply:()=>this.openDlg('reply',m),ack:()=>this.ack([m.id]),canAck:forYou(m)&&!m.acks.includes('rohan')&&m.sender!=='rohan',bg:forYou(m)&&!m.acks.includes('rohan')&&m.sender!=='rohan'?'#fffdf8':'#fbfaf5',...this.rc(m)}));
+    const inboxTabs=[['you','For you'],['unread','Unread'],['all','Everything']].map(([k,l])=>({label:l,on:()=>this.setState({inboxF:k}),bg:st.inboxF===k?'#182329':'transparent',fg:st.inboxF===k?'#fff':'#67746f'}));
+    // lanes (static mock timeline 05:00–07:00)
+    const pc=m=>(m/120*100).toFixed(1)+'%';
+    const bar=(a,b,label,kind,sid,tid)=>{const w=W(sid);const k={run:{bg:w.bg,bd:w.c,fg:w.c,bs:'solid'},done:{bg:'#e5f0e8',bd:'#3e745a',fg:'#2f694e',bs:'solid'},block:{bg:'#f8ead6',bd:'#c17b2c',fg:'#8a5619',bs:'dashed'},stale:{bg:'#ecefec',bd:'#9aa6a0',fg:'#67746f',bs:'dashed'},lane:{bg:'#f8ead6',bd:'#c17b2c',fg:'#8a5619',bs:'solid'}}[kind];
+      return {l:pc(a),w:pc(b-a),label,top:kind==='lane'?'40px':'22px',h:kind==='lane'?'10px':'24px',...k,on:()=>tid&&this.setState({sel:tid,view:'tasks'})};};
+    const mark=(m,sym,kind,tip)=>({l:pc(m),sym,tip,bg:{d:'#3e745a',q:'#4e5ea2',x:'#a44339',h:'#c17b2c'}[kind],rad:kind==='q'?'50%':'3px'});
+    const lanes=[
+      {id:'wa',bars:[bar(35,88,'Security fix: signed media URLs','done','wa','t-0f12'),bar(90,105,'WhatsApp card','run','wa','t-4e1a'),bar(101,105,'','lane','wa','t-4e1a')],marks:[mark(88,'D','d','Deployed 352e463'),mark(94,'?','q','Supervisor asked about Chrome')]},
+      {id:'cc',bars:[bar(20,105,'CCTV interface rewrite','run','cc','t-9c07')],marks:[mark(82,'✕','x','Refused pie-menu on components/cctv/'),mark(91,'?','q','Asked about merging 352e463')]},
+      {id:'gs',bars:[bar(0,105,'gsd-onboarding','run','gs','t-77d0')],marks:[mark(70,'H','h','Handoff brief shared')]},
+      {id:'ma',bars:[bar(30,80,'Government-tender connector','run','ma','t-2b33'),bar(80,105,'blocked on you','block','ma','t-2b33')],marks:[mark(80,'?','q','Approval requested')]},
+      {id:'pm',bars:[bar(65,82,'Pie menu dial','run','pm','t-a310'),bar(90,105,'queued web-prod','block','pm','t-a310')],marks:[mark(82,'✕','x','Claim refused')]},
+      {id:'al',bars:[bar(0,105,'Alert dedupe window · owner silent since 00:33','stale','al','t-51f8')],marks:[]}
+    ].map(r=>({...r,s:W(r.id),op:staleIds.has(r.id)?.7:1}));
+    const ticks=[0,30,60,90,120].map((m,i)=>({l:i===0?'3%':i===4?'96%':pc(m),label:['05:00','05:30','06:00','06:30','07:00'][i]}));
+    const caught=[
+      {type:'Refused claim',fg:'#a44339',t:'06:22',text:'Codex · pie-menu asked for components/cctv/ while Claude · capture-v2 held it. Refused before any edit.'},
+      {type:'Stale base',fg:'#8a5619',t:'06:31',text:'CCTV rewrite branched off 1a7e0c2. After 352e463 shipped, its next deploy would have reverted the security fix.'},
+      {type:'Deploy check',fg:'#176e76',t:'06:34',text:'Supervisor asked whether Chrome exists on target before the renderer swap shipped. Checked, not assumed.'}];
+    // palette
+    const allCmds=[
+      ...[['command','Command center'],['tasks','Tasks'],['lanes','Agent lanes'],['claims','Claims & locks'],['inbox','Inbox'],['lessons','Lessons'],['activity','Activity']].map(([v,l])=>({group:'Go to',label:l,sub:'',key:'',run:go(v)})),
+      ...(t.status!=='DONE'?[{group:'Task',label:`Pause “${t.title}”`,sub:'claims stay reserved',run:()=>{this.setState({pal:false});this.setStatus(t,t.human_paused?'resume':'pause');}},{group:'Task',label:`Reassign “${t.title}”`,sub:'to a live session',run:()=>this.openDlg('reassign',t)},{group:'Task',label:`Close “${t.title}” with note`,sub:'releases '+t.resources.length+' claim(s)',run:()=>this.openDlg('close',t)}]:[{group:'Task',label:`Reopen “${t.title}”`,sub:'re-claims recorded paths',run:()=>this.openDlg('reopen',t)}]),
+      {group:'Create',label:'Add task',sub:'refused if its paths overlap an open claim',run:()=>this.openDlg('newTask')},
+      {group:'Create',label:'Write message',sub:'to a session, an agent kind, or everyone',run:()=>this.openDlg('message')},
+      {group:'Create',label:'Add lesson',sub:'shared memory for every agent',run:()=>this.openDlg('lesson')},
+      {group:'Check',label:'Would it conflict?',sub:'look up who holds a path',run:()=>this.setState({view:'claims',pal:false})},
+      ...d.tasks.map(x=>({group:'Open',label:x.title,sub:`${x.id} · ${x.status} · ${W(x.owner).name}`,run:()=>this.setState({sel:x.id,pal:false,view:view==='command'?'command':'tasks'})})),
+      ...d.sessions.map(s=>({group:'Agent',label:s.name,sub:`${s.branch} · ${s.stale?'stale '+s.age:'seen '+s.age}`,run:()=>{ const x=d.tasks.find(y=>y.owner===s.id&&y.status!=='DONE'); this.setState({pal:false,view:'tasks',...(x?{sel:x.id}:{})}); }}))
+    ];
+    const pq=st.palQ.trim().toLowerCase();
+    const cmdList=allCmds.filter(c=>!pq||(c.group+' '+c.label+' '+c.sub).toLowerCase().includes(pq)).slice(0,9);
+    const palI=Math.min(st.palI,Math.max(0,cmdList.length-1));
+    this._cmds=cmdList;
+    const cmds=cmdList.map((c,i)=>({...c,key:i===palI?'⏎':'',bg:i===palI?'#e7edff':'transparent',hover:()=>this.state.palI!==i&&this.setState({palI:i})}));
+    // dialog
+    let dlg=null; if(st.dlg){ dlg={...st.dlg,hint:st.dlg.hint||'',fields:st.dlg.fields.map(([k,label,type,opts])=>({label,value:st.form[k]??'',on:e=>{const v=e.target.value;this.setState(s=>({form:{...s.form,[k]:v},dlgError:''}));},
+      isText:type==='text',isArea:type==='area',isSelect:type==='select',isReadonly:type==='readonly',options:type==='select'?opts:[],font:opts==='mono'?"'IBM Plex Mono',monospace":'inherit'}))}; }
+    const navDefs=[['command','Command center',attAll.length],['tasks','Tasks',d.tasks.filter(x=>x.status!=='DONE').length],['lanes','Agent lanes',d.sessions.length],['claims','Claims & locks',held.length],['inbox','Inbox',unread.length||''],['lessons','Lessons',d.lessons.length],['activity','Activity','']];
+    const nav=navDefs.map(([v,label,count])=>({label,count,on:go(v),fw:view===v?700:500,fg:view===v?'#182329':'#2d3b42',bg:view===v?'#fbfaf5':'transparent',cfg:view===v?'#2456d6':'#87918d'}));
+    const paneView=view==='command'||view==='tasks', wide=st.w>=1280, isDrawer=paneView&&!wide;
+    const showAside=paneView&&(wide||st.drawer);
+    const navW=st.w<900?168:216, mainW=st.w-navW-(paneView&&wide?404:0)-48;
+    const wideLed=mainW>=760, narrowAtt=mainW<720;
+    const density=this.props.density??'comfortable';
+    return {
+      cols:paneView&&wide?`${navW}px minmax(0,1fr) 404px`:`${navW}px minmax(0,1fr)`, nav, showAside, isDrawer, closeDrawer:()=>this.setState({drawer:false}),
+      asPos:isDrawer?'fixed':'relative', asTop:isDrawer?'52px':'0', asW:isDrawer?'min(404px,100vw)':'auto', asSh:isDrawer?'-18px 0 50px rgba(24,35,41,.22)':'none',
+      ledCols:wideLed?'84px minmax(0,1fr) 140px 170px 92px 44px':'84px minmax(0,1fr) 120px', wideLed,
+      attCols:narrowAtt?'104px minmax(0,1fr)':'104px minmax(0,1fr) auto', actSpan:narrowAtt?'1 / -1':'auto', actJustify:narrowAtt?'flex-start':'flex-end',
+      isCommand:view==='command', isLedger:view==='command'||view==='tasks', isLanes:view==='lanes', isClaims:view==='claims', isInbox:view==='inbox', isLessons:view==='lessons', isActivity:view==='activity',
+      attCount:attAll.length, att:attRows, attTabs, attEmpty:!att.length, sessions, presenceLine:`${liveN} checked in${staleN?` · ${staleN} stale (claims stay reserved)`:''}`, liveCount:liveN,
+      ledgerTitle:view==='command'?'Work':'Tasks', ledgerCount:view==='command'?`${pool.filter(x=>x.status!=='DONE').length} open · ${pool.filter(x=>x.status==='DONE').length} done`:`${visible.length} shown`,
+      groups, ledgerEmpty:!groups.length, sfTabs:view==='tasks'?sfTabs:[], ownerOpts, q:st.q, of:st.of, rowPad:density==='compact'?'6px 14px':'11px 14px',
+      onQ:e=>this.setState({q:e.target.value}), onOwner:e=>this.setState({of:e.target.value}),
+      sel, comment:st.comment, onComment:e=>this.setState({comment:e.target.value}), onCommentKey:e=>{ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); this.sendComment(); } }, sendComment:()=>this.sendComment(),
+      claims:claimsRows, claimsLine:`${held.length} paths held by ${new Set(held.map(h=>h.x.owner)).size} sessions · directory claims cover descendants`, cq:st.cq, onCq:e=>this.setState({cq:e.target.value}), cr, laneQueue,
+      laneLabel:laneHolder?'lane held':'lane free', laneFg:laneHolder?'#e8bb78':'#56ba79',
+      inbox, inboxTabs, inboxEmpty:!inbox.length, unreadLine:`${unread.length} unread for you`, ackAll:()=>{ const ids=unread.filter(m=>m.recipient==='all').map(m=>m.id); if(ids.length) this.ack(ids); else this.flash('No unread broadcasts.'); },
+      lessons:d.lessons.map(l=>({...l,archive:()=>this.mut(dd=>{dd.lessons=dd.lessons.filter(x=>x.id!==l.id);},'Lesson archived.',['lesson.archive',{lesson_id:l.id,reason:'Archived from dashboard'}],true)})),
+      events:d.events.map(e=>({...e,w:W(e.actor)})),
+      lanes, ticks, caught,
+      pal:st.pal, palQ:st.palQ, onPalQ:e=>this.setState({palQ:e.target.value,palI:0}), cmds, cmdsEmpty:!cmds.length, palRef:el=>{ if(el&&document.activeElement!==el) el.focus(); },
+      openPalette:()=>this.setState({pal:true,palQ:'',palI:0}),
+      dlg, dlgError:st.dlgError, submitDlg:()=>this.submitDlg(), closeAll:()=>this.setState({pal:false,dlg:null}), stop,
+      toast:st.toast, canUndo:!!st.undo, undo:()=>{ const u=st.undo; if(u) u(); },
+      goCommand:go('command'), goClaims:go('claims'), goLanes:go('lanes'),
+      openNewTask:()=>this.openDlg('newTask'), openNewMessage:()=>this.openDlg('message'), openLesson:()=>this.openDlg('lesson'), openConnect:()=>this.openDlg('connect'),
+      openTender:()=>this.setState({sel:'t-2b33',view:'tasks'}), onProject:()=>this.flash('Other projects have no mock data in this prototype.'),
+      liveDot:this.props.apiBase?(st.live?'#56ba79':'#cf665c'):'#56ba79', liveLabel:this.props.apiBase?(st.live?'Live · '+liveN+' agents':'Disconnected · '+st.liveError):`Mock data · ${liveN} agents`
+    };
+  }
+  rc(m){ const others=m.acks.filter(a=>a!==m.sender); return others.length?{receipt:'Read by '+others.map(a=>this.who(a).short).join(', '),rcFg:'#36765a'}:{receipt:'Sent · awaiting read',rcFg:'#96601b'}; }
+}
+</script>
+</body>
+</html>
