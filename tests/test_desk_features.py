@@ -111,6 +111,7 @@ def test_the_journal_records_the_life_of_a_task(desk):
     events = d.check_in(a['session_key'], include=['events'])['events']
     assert any(e['kind'] == 'journal.logged' for e in events)
     assert d.snapshot('alpha')['task_logs'][t['id']][-1]['kind'] == 'blocked'
+    assert len(d.snapshot('alpha')['task_logs'][t['id']]) == 2
 
 
 # ---------- 3. resume ----------

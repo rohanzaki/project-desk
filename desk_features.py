@@ -128,6 +128,47 @@ class FeaturesMixin:
         row = c.execute('SELECT name FROM sessions WHERE id=?', (session_id,)).fetchone()
         return row['name'] if row else session_id
 
+    def _names(self, c, session_ids):
+        """Display names for many sessions in one query (the snapshot must not look them up row by row)."""
+        ids = sorted({sid for sid in session_ids if sid and sid not in (HUMAN, SYSTEM)})
+        names = {HUMAN: 'Human', SYSTEM: 'Project Desk'}
+        for chunk in range(0, len(ids), 500):
+            part = ids[chunk:chunk + 500]
+            names.update({r['id']: r['name'] for r in c.execute(
+                f"SELECT id,name FROM sessions WHERE id IN ({','.join('?' * len(part))})", part)})
+        return names
+
+    def _recent_logs(self, c, task_ids, per_task=2, chars=200):
+        """The last few journal entries for many tasks, in one query."""
+        if not task_ids:
+            return {}
+        rows = c.execute(f'''SELECT task_id,seq,author,kind,entry,created FROM (
+                                SELECT *, ROW_NUMBER() OVER (PARTITION BY task_id ORDER BY seq DESC) n
+                                FROM task_log WHERE task_id IN ({','.join('?' * len(task_ids))}))
+                             WHERE n<=? ORDER BY task_id, seq''', (*task_ids, per_task)).fetchall()
+        names = self._names(c, [r['author'] for r in rows])
+        out = {}
+        for r in rows:
+            out.setdefault(r['task_id'], []).append(
+                {'seq': r['seq'], 'author': r['author'], 'author_name': names.get(r['author'], r['author']),
+                 'kind': r['kind'], 'entry': r['entry'][:chars], 'created': r['created']})
+        return out
+
+    def _board_lessons(self, c, project, limit=40):
+        rows = c.execute('SELECT * FROM lessons WHERE archived=0 AND project IN (?,?) ORDER BY updated DESC LIMIT ?',
+                         (project, GLOBAL, limit)).fetchall()
+        names = self._names(c, [r['author'] for r in rows])
+        return [{'id': r['id'], 'body': r['body'][:400], 'paths': json.loads(r['paths']), 'tags': json.loads(r['tags']),
+                 'scope': 'global' if r['project'] == GLOBAL else 'project',
+                 'author_name': names.get(r['author'], r['author']), 'updated': r['updated']} for r in rows]
+
+    def _board_approvals(self, c, project, limit=30):
+        rows = c.execute("SELECT * FROM approvals WHERE project=? AND (status='pending' OR decided>?) "
+                         'ORDER BY created DESC LIMIT ?', (project, _ago(hours=72), limit)).fetchall()
+        names = self._names(c, [r['requester'] for r in rows])
+        return [{**dict(r), 'options': json.loads(r['options']),
+                 'requester_name': names.get(r['requester'], r['requester'])} for r in rows]
+
     def _aliases(self, c, session_id):
         """This session plus every earlier session it resumed (resume_session)."""
         ids, frontier = [session_id], [session_id]
@@ -732,7 +773,7 @@ class FeaturesMixin:
 
     # ---- 10. stale-claim alerts ----------------------------------------------
 
-    def _stale(self, c, project=None, hours=STALE_HOURS):
+    def _stale(self, c, project=None, hours=STALE_HOURS, limit=None):
         query = '''SELECT t.id,t.project,t.title,t.status,t.owner,t.resources,s.name,s.last_seen
                    FROM tasks t JOIN sessions s ON s.id=t.owner
                    WHERE t.status IN ('RUNNING','BLOCKED','PAUSED') AND t.human_paused=0 AND t.imported=0
@@ -741,7 +782,12 @@ class FeaturesMixin:
         if project:
             query += ' AND t.project=?'
             args.append(project)
-        rows = c.execute(query + ' ORDER BY s.last_seen', args).fetchall()
+        if limit:
+            query += ' ORDER BY s.last_seen LIMIT ?'
+            args.append(limit)
+        else:
+            query += ' ORDER BY s.last_seen'
+        rows = c.execute(query, args).fetchall()
         return [{'task_id': r['id'], 'project': r['project'], 'title': r['title'], 'status': r['status'],
                  'owner': r['owner'], 'owner_name': r['name'], 'owner_last_seen': r['last_seen'],
                  'resources': json.loads(r['resources'])} for r in rows]

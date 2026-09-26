@@ -1020,20 +1020,15 @@ class Store(FeaturesMixin):
                                 for r in c.execute("SELECT * FROM claims WHERE resource LIKE 'service:%' AND project!=?",(project,))],
                 'crossovers':self._crossovers_for(c,project,include_closed=True),
                 'outgoing_messages':outgoing,
-                'lessons':[{**l,'body':l['body'][:400]} for l in
-                           (self._lesson_row(c,r,compact=True) for r in c.execute(
-                               'SELECT * FROM lessons WHERE archived=0 AND project IN (?,?) ORDER BY updated DESC LIMIT 40',
-                               (project,'*')))],
-                'approvals':[self._approval_row(c,r[0]) for r in c.execute(
-                    "SELECT id FROM approvals WHERE project=? AND (status='pending' OR decided>?) ORDER BY created DESC LIMIT 30",
-                    (project,(datetime.now(timezone.utc)-timedelta(days=3)).isoformat()))],
+                'lessons':self._board_lessons(c,project),
+                'approvals':self._board_approvals(c,project),
                 'open_questions':[{'message_id':r['message_id'],'asker':r['asker'],'recipient':r['recipient'],'created':r['created']}
                                   for r in c.execute("SELECT * FROM questions WHERE project=? AND status='open' ORDER BY created DESC LIMIT 50",(project,))],
                 'queues':[{'resource':r['resource'],'queue':self._queue_view(c,r['resource'],project)} for r in c.execute(
                     "SELECT DISTINCT resource FROM resource_queue WHERE project=? OR resource LIKE 'service:%'",(project,))],
                 'prod':self._prod(c)['services'],
-                'stale_claims':self._stale(c,project),
-                'task_logs':{tid:self._journal(c,tid,3) for tid in [t['id'] for t in tasks if t['status']!='DONE'][:100]},
+                'stale_claims':self._stale(c,project,limit=50),
+                'task_logs':self._recent_logs(c,[t['id'] for t in tasks if t['status']!='DONE'][:100]),
                 'evidence':self._evidence_summary(c,[t['id'] for t in tasks]),
                 'generated_at':now()}
 
