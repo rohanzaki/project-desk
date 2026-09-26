@@ -99,7 +99,7 @@ function renderNotifications(){
   $('#notification-list').innerHTML=events.length?events.map(event=>`<div class="notification-item notification-${esc(notificationKind(event))}" data-notification-seq="${esc(event.seq)}"><div class="notification-item-top"><span class="event-type">${esc(notificationKind(event))}</span><span>${time(event.created)}</span></div><p>${esc(notificationText(event))}</p></div>`).join(''):'<p class="notification-empty">No new updates.</p>';
 }
 
-function recipientOptions(value='all',include=''){
+function recipientOptions(value='all',include='',includeLabel=''){
   const options=[
     {value:'all',label:'Everyone'},
     {value:'rohan',label:'Human'},
@@ -110,6 +110,11 @@ function recipientOptions(value='all',include=''){
   [...activeSessions(),sessionFor(include)].filter(Boolean).forEach(session=>{
     if(!ids.has(session.id)){options.push({value:session.id,label:sessionLabel(session.id)});ids.add(session.id);}
   });
+  (board?.crossovers||[]).filter(item=>item.status!=='closed').forEach(item=>{
+    if(!ids.has(item.id)){options.push({value:item.id,label:`Crossover · ${item.title} (${item.members.map(member=>member.project).join(' + ')})`});ids.add(item.id);}
+  });
+  // A sender from another project is not in this board's sessions; keep it replyable.
+  if(include&&!ids.has(include)){options.push({value:include,label:includeLabel||include});ids.add(include);}
   return options;
 }
 
@@ -166,6 +171,15 @@ function switchProject(slug){
   Object.assign(ui,{taskPage:1,messagePage:1,notePage:1,sessionPage:1,eventPage:1});
   taskDetailState.clear();notificationProject='';
   showBoard();renderProjectSelect();refresh();
+}
+const senderLabel=message=>message.from_project?`${message.from_name||message.sender} (project ${message.from_project})`:name(message.sender);
+function renderCrossovers(){
+  const box=$('#crossovers');
+  if(onOverview()){box.hidden=true;return;}
+  const dayAgo=Date.now()-864e5;
+  const items=(board?.crossovers||[]).filter(item=>item.status!=='closed'||new Date(item.updated).getTime()>dayAgo);
+  box.hidden=!items.length;
+  box.innerHTML=items.length?'<strong>Crossovers with other projects</strong>'+items.map(item=>`<div class="crossover crossover-${esc(item.status)}"><span class="crossover-status">${esc(item.status)}</span> <strong>${esc(item.title)}</strong> <span class="meta">${esc(item.id)}</span><div class="crossover-members">${item.members.map(member=>`<span class="crossover-member">${esc(member.project)}: ${member.task_id?`${esc(member.owner_name||shortId(member.owner))} · ${esc(shortId(member.task_id))} · ${esc(member.task_status||'')} · ${member.signed_off?'signed off':'awaiting sign-off'}`:'invited, not joined'}</span>`).join('')}</div></div>`).join(''):'';
 }
 function renderSharedLocks(){
   const box=$('#shared-locks');
@@ -279,7 +293,7 @@ function messageCard(message,compact=false){
   const task=taskFor(message.task_id);
   return `<article class="message message-from-${esc(agentKind(message.sender))} message-to-${esc(agentKind(message.recipient))}${compact?' message-compact':''}" data-message="${esc(message.id)}">
     <div class="message-route"><div>${agentChip(message.sender)}<span class="route-arrow">to</span>${agentChip(message.recipient,'agent-recipient')}</div><time>${time(message.created)}</time></div>
-    <div class="meta message-direction">${esc(name(message.sender))} to ${esc(recipientLabel(message.recipient))}</div>
+    <div class="meta message-direction">${esc(senderLabel(message))} to ${esc(recipientLabel(message.recipient))}${message.crossover_id?` · crossover ${esc(message.crossover_id)}`:''}</div>
     ${task?`<div class="message-task">Task: <strong>${esc(task.title)}</strong> <span>${esc(shortId(task.id))}</span></div>`:''}
     <p>${esc(message.body)}</p>
     ${messageReceipt(message)}
@@ -418,6 +432,7 @@ function renderEvents(){
 
 function render(){
   renderSharedLocks();
+  renderCrossovers();
   updateOwnerFilter();
   renderMetrics();
   renderTasks();
@@ -429,7 +444,8 @@ function composeMessage(taskId='',recipient='all',replyTo=''){
   const task=taskFor(taskId),original=board.messages.find(message=>message.id===replyTo);
   const context=task?`<p class="dialog-context">Task: <strong>${esc(task.title)}</strong> <span>${esc(shortId(task.id))}</span></p>`:'';
   const title=replyTo?'Reply in team inbox':task?'Comment on task':'Write to the team';
-  openEditor(title,context+field('Recipient','recipient','select',recipient,recipientOptions(recipient,original?.sender))+field('Message','body','textarea'),data=>mutate('message',{recipient:data.recipient,body:data.body,...(taskId?{task_id:taskId}:{})}));
+  const foreign=original?.from_project?`${original.from_name||original.sender} · project ${original.from_project}`:'';
+  openEditor(title,context+field('Recipient','recipient','select',recipient,recipientOptions(recipient,original?.sender,foreign))+field('Message','body','textarea'),data=>mutate('message',{recipient:data.recipient,body:data.body,...(taskId?{task_id:taskId}:{})}));
 }
 
 $('#editor-form').addEventListener('submit',async event=>{

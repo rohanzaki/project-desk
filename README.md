@@ -111,6 +111,23 @@ Each project has its own page at `/p/<project>`; `/projects` lists them all.
 `service:` claims still lock across projects, and each board shows the ones held
 elsewhere under **Shared locks**.
 
+### When work spans two projects: crossover
+
+Projects stay isolated by default. Two explicit doors open between them:
+
+- **Direct messages.** `send_message` accepts a session id registered in another
+  project, or `<project>:all` / `:claude` / `:codex`. The message is stored in
+  the receiving project, so its inbox, receipts and hooks treat it like a local
+  one and show which project it came from. `list_peers` shows who is where.
+- **Crossovers.** For shared work such as an API one repo serves and another
+  calls, the task owner runs `start_crossover(task_id, invite=[project or
+  session])`. The invited side runs `join_crossover` with paths in its own repo,
+  which claims a task on its own side: claims never cross projects. The
+  crossover id (`x-...`) is a message address that reaches every member, members
+  can read each other's task with `get_task_context`, and each side records
+  `sign_off_crossover`. No side can mark its task DONE until every other joined
+  side has signed off or finished. The human can still close any task.
+
 Strict mode (`PROJECT_DESK_STRICT=1`, set in the shipped `project-desk.service`)
 refuses registration from a repo that declares no project. Run
 `PROJECT_DESK_STRICT=1 .venv/bin/python server.py` to get the same behaviour

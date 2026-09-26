@@ -160,8 +160,14 @@ def collect(state, response, initial=False, full=False):
     inbox = response.get('inbox', [])
     for message in inbox:
         if initial or message['id'] not in seen:
-            lines.append(f"UNACKNOWLEDGED MESSAGE {message['id']} from {compact(message['sender'], 80)} "
-                         f"task={compact(message.get('task_id') or 'Team Inbox', 80)}: "
+            sender = compact(message['sender'], 80)
+            if message.get('from_project'):   # sent from another project: say which, so the reply can go back
+                sender += (f" (project {compact(message['from_project'], 100)}, "
+                           f"{compact(message.get('from_name') or '', 100)})")
+            thread = message.get('task_id') or (f"crossover {message['crossover_id']}"
+                                                if message.get('crossover_id') else 'Team Inbox')
+            lines.append(f"UNACKNOWLEDGED MESSAGE {message['id']} from {sender} "
+                         f"task={compact(thread, 80)}: "
                          f"{compact(message['body'], 500)}")
     # Preserve only current inbox IDs. The server remains authoritative for receipts.
     state['messages'] = [m['id'] for m in inbox]

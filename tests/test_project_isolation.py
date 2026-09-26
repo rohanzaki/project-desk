@@ -1,4 +1,8 @@
-"""Agents act only in their own project: one test per agent tool."""
+"""Agents act only in their own project: one test per agent tool.
+
+The one deliberate door is an explicit cross-project address (a session id
+registered elsewhere, or '<project>:all'); crossovers are covered in
+test_crossover.py. Task-level isolation below holds without a crossover."""
 import json
 
 import pytest
@@ -25,10 +29,19 @@ def two(tmp_path):
     return d, a, b, beta_task, beta_message, queued
 
 
-def test_message_to_other_project_session_refused(two):
+def test_message_to_other_project_session_lands_in_that_project(two):
     d, a, b, *_ = two
+    sent = d.message(a['session_key'], b['session_id'], 'hi')
+    assert sent['to_project'] == 'beta'
+    delivered = [m for m in d.check_in(b['session_key'], include=['inbox'])['inbox'] if m['id'] == sent['message_id']]
+    assert delivered and delivered[0]['project'] == 'beta' and delivered[0]['from_project'] == 'alpha'
+    assert all(m['id'] != sent['message_id'] for m in d.snapshot('alpha')['messages'])
+
+
+def test_message_to_unknown_session_refused(two):
+    d, a, *_ = two
     with pytest.raises(ValueError, match='Unknown recipient'):
-        d.message(a['session_key'], b['session_id'], 'hi')
+        d.message(a['session_key'], 's-000000000000', 'hi')
 
 
 def test_message_on_other_project_task_refused(two):

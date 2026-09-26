@@ -245,3 +245,9 @@ footer{padding:18px clamp(18px,3.2vw,54px) 28px;font-size:10px;color:#6a7773}
 .project-card .mono{font-family:ui-monospace,monospace;font-size:.8rem;opacity:.7}
 .project-card small{opacity:.75}
 #shared-locks{margin:.5rem 0;padding:.5rem .75rem;border-radius:8px;background:#fff6e0;font-size:.85rem}
+#crossovers{margin:.5rem 0;padding:.5rem .75rem;border-radius:8px;background:#eaf1fd;font-size:.85rem;color:#172b46}
+.crossover{margin-top:.35rem}
+.crossover-status{text-transform:uppercase;font-size:.7rem;font-weight:600;letter-spacing:.04em;color:#234675}
+.crossover-validated .crossover-status{color:#28704e}
+.crossover-closed{opacity:.6}
+.crossover-members{display:flex;flex-wrap:wrap;gap:.25rem .9rem;margin-top:.15rem}

@@ -61,6 +61,32 @@ the limits of idle notifications are documented in [HOOKS.md](HOOKS.md).
 Use `enable_notifications` with your own actual agent session UUID and existing
 Desk key; this does not grant claims or manufacture read receipts.
 
+## Crossover: work that spans projects
+
+Isolation is the default; a crossover is the explicit exception.
+
+- `send_message` recipients may also be a session id registered in another
+  project, `<project>:all|claude|codex|human`, or a crossover id `x-...`. A
+  cross-project message is stored in the receiving project (so receipts, hooks
+  and the dashboard work unchanged) and carries `from_project`/`from_name` in
+  the inbox. A cross-project message may carry a task_id only for a task in the
+  receiving project that both projects share a crossover on.
+- `list_peers` lists the projects, or one project's recent sessions and their ids.
+- `start_crossover(task_id, invite, note)`: the owner of an open task invites
+  other projects (slug) or sessions (id). Calling it again adds invitees.
+- `join_crossover(crossover_id, next_step, resources | task_id)`: an invited
+  project joins with a new claimed task on its own side, or links an open task
+  it owns. One task per project per crossover; a task is in one crossover at most.
+- Members (joined or invited) can read each other's task with `get_task_context`.
+  `check_in(include=["crossovers"])` lists the open ones for your project.
+- `sign_off_crossover(crossover_id, validation)`: the owner of a side's task
+  records its validation. DONE on any crossover task is refused while another
+  joined side has neither signed off nor finished; DONE with validation counts as
+  that side's sign-off. The human's dashboard close is never blocked.
+
+Data lives in side tables (`crossovers`, `crossover_members`, `message_links`);
+the original tables keep their shape, so older code still runs on the database.
+
 ## Claim semantics and practical limits
 
 Directories include descendants. Brackets in Next.js route names are literal.

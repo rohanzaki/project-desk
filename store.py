@@ -73,7 +73,7 @@ class Store:
     # new. On a busy project it reached ~695KB and overran the caller's context
     # twice in one night, so the message the agent needed could not be read at
     # all. An agent should ask for sections instead: ['inbox','conflicts'].
-    SECTIONS = ('events', 'inbox', 'board', 'my_tasks', 'counts')
+    SECTIONS = ('events', 'inbox', 'board', 'my_tasks', 'counts', 'crossovers')
     # What a caller that passes no `include` has always received.
     LEGACY_SECTIONS = ('events', 'inbox', 'board')
     # Long prose fields are kept whole in the inbox (the body IS the point) but
@@ -134,6 +134,21 @@ class Store:
                     slug TEXT PRIMARY KEY, name TEXT NOT NULL, repo_roots TEXT NOT NULL DEFAULT '[]',
                     rules_path TEXT NOT NULL DEFAULT '', archived INTEGER NOT NULL DEFAULT 0,
                     created TEXT NOT NULL);
+                -- Crossover. Side tables only: the messages table keeps its original
+                -- seven columns, because earlier code inserts into it positionally and a
+                -- rollback to that code must still run against this database.
+                CREATE TABLE IF NOT EXISTS message_links (
+                    message_id TEXT PRIMARY KEY, origin_project TEXT NOT NULL, crossover_id TEXT);
+                CREATE TABLE IF NOT EXISTS crossovers (
+                    id TEXT PRIMARY KEY, title TEXT NOT NULL, origin_project TEXT NOT NULL,
+                    origin_task TEXT NOT NULL, created_by TEXT NOT NULL,
+                    created TEXT NOT NULL, updated TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS crossover_members (
+                    crossover_id TEXT NOT NULL, project TEXT NOT NULL, task_id TEXT,
+                    invited_by TEXT NOT NULL, invited TEXT NOT NULL, joined TEXT, joined_by TEXT,
+                    signoff TEXT NOT NULL DEFAULT '', signed_by TEXT, signed TEXT,
+                    PRIMARY KEY(crossover_id, project), FOREIGN KEY(crossover_id) REFERENCES crossovers(id));
+                CREATE INDEX IF NOT EXISTS crossover_members_task ON crossover_members(task_id);
             ''')
             self._sync_registry(c)
         self.path.chmod(0o600)
@@ -461,14 +476,18 @@ class Store:
                 c.execute("UPDATE tasks SET owner=?,status='RUNNING',updated=?,version=version+1 WHERE id=?",
                           (s['id'], now(), task_id))
             else:
-                task_id = ident('t-')
-                c.execute('''INSERT INTO tasks(id,project,title,owner,status,resources,next_step,updated)
-                             VALUES(?,?,?,?,'RUNNING',?,?,?)''',
-                          (task_id,s['project'],text(title,'title',300),s['id'],json.dumps(resources),
-                           text(next_step,'next step'),now()))
+                task_id = self._insert_task(c, s, title, resources, next_step)
             self.claim_resources(c, s['project'], task_id, resources)
             self.event(c,s['project'],s['id'],'task.claimed', {'task_id': task_id, 'resources':resources})
             return self.task(c, task_id)
+
+    def _insert_task(self, c, s, title, resources, next_step):
+        task_id = ident('t-')
+        c.execute('''INSERT INTO tasks(id,project,title,owner,status,resources,next_step,updated)
+                     VALUES(?,?,?,?,'RUNNING',?,?,?)''',
+                  (task_id,s['project'],text(title,'title',300),s['id'],json.dumps(resources),
+                   text(next_step,'next step'),now()))
+        return task_id
 
     def update(self, key, task_id, version, status, next_step, summary='', validation='', commit_ref='',
                deployment='not_deployed', resources=None):
@@ -487,6 +506,14 @@ class Store:
             if t['status'] == 'DONE':
                 raise Conflict('Completed tasks are immutable; create a follow-up task')
             new_resources = scopes(resources) if resources is not None else t['resources']
+            crossover_id = self._crossover_of_task(c, task_id) if status == 'DONE' else None
+            if crossover_id:
+                self._require_signoffs(c, crossover_id, task_id)
+                # Finishing with evidence is this side's sign-off.
+                c.execute('''UPDATE crossover_members SET signoff=?,signed_by=?,signed=?
+                             WHERE crossover_id=? AND task_id=? AND signed IS NULL''',
+                          (validation,s['id'],now(),crossover_id,task_id))
+                c.execute('UPDATE crossovers SET updated=? WHERE id=?',(now(),crossover_id))
             if status == 'DONE':
                 c.execute('DELETE FROM claims WHERE task_id=?',(task_id,))
             else:
@@ -498,6 +525,10 @@ class Store:
                       (status,next_step,summary,validation,commit_ref,deployment,json.dumps(new_resources),now(),task_id))
             self.event(c,s['project'],s['id'],'task.updated',
                        {'task_id':task_id,'status':status,'summary':summary,'validation':validation,'next_step':next_step})
+            if crossover_id:
+                self._crossover_notice(c, crossover_id, s,
+                    f"{s['project']} finished its side of crossover {crossover_id} ({task_id}): {summary}\n"
+                    f"Validation: {validation}")
             return self.task(c,task_id)
 
     def handoff(self, key, task_id, version, target_session, accept=False):
@@ -637,14 +668,16 @@ class Store:
         with self.connection(True) as c:
             s = self.auth(c, key)
             t = self.task(c, task_id)
-            if t['project'] != s['project']:
+            if t['project'] != s['project'] and not self._shares_crossover(c, s['project'], task_id):
                 raise PermissionError('Task belongs to another project')
             comments = [dict(row) for row in c.execute('''SELECT id,project,sender,recipient,
                 body,task_id,created FROM messages WHERE project=? AND task_id=?
                 ORDER BY created DESC LIMIT ?''',
-                (s['project'],task_id,self.CONTEXT_COMMENT_LIMIT))]
-            handoffs = self._handoffs(c, s['project'], task_id, self.CONTEXT_HANDOFF_LIMIT)
-            return {'project':s['project'], 'task':t, 'comments':comments,
+                (t['project'],task_id,self.CONTEXT_COMMENT_LIMIT))]
+            handoffs = self._handoffs(c, t['project'], task_id, self.CONTEXT_HANDOFF_LIMIT)
+            crossover_id = self._crossover_of_task(c, task_id)
+            return {'project':t['project'], 'task':t, 'comments':self._decorate(c, comments),
+                    'crossovers':[self._crossover_view(c, crossover_id)] if crossover_id else [],
                     'comment_limit':self.CONTEXT_COMMENT_LIMIT,
                     'handoff_briefs':handoffs,
                     'handoff_limit':self.CONTEXT_HANDOFF_LIMIT,
@@ -656,25 +689,102 @@ class Store:
     def message(self, key, recipient, body, task_id=None):
         with self.connection(True) as c:
             s=self.auth(c,key)
+            if isinstance(recipient,str) and recipient.startswith('x-'):
+                if task_id:
+                    raise ValueError('A crossover message goes to every member; it takes no task_id')
+                return self._crossover_message(c,s['project'],s['id'],recipient,body)
             return self._message(c,s['project'],s['id'],recipient,body,task_id)
 
-    def _message(self,c,project,sender,recipient,body,task_id=None):
+    def _open_project(self, c, slug):
+        row = c.execute('SELECT archived FROM projects WHERE slug=?', (slug,)).fetchone()
+        if not row:
+            raise ValueError(f'Unknown project {slug}')
+        if row['archived']:
+            raise ValueError(f'Project {slug} is archived')
+
+    def _route(self, c, project, recipient):
+        """Where a message lands: (project, stored recipient).
+
+        Same-project forms are unchanged. Two forms cross into another project:
+        a session id registered there, or '<project>:all|claude|codex|human'.
+        The message is stored in the RECEIVING project, so its inbox, receipts,
+        hooks and dashboard work exactly as for a local message.
+        """
+        if not isinstance(recipient, str) or not recipient:
+            raise ValueError('Unknown recipient in this project')
+        if recipient in ('all','codex','claude',HUMAN):
+            return project, recipient
+        if ':' in recipient:
+            slug, _, kind = recipient.partition(':')
+            kind = HUMAN if kind == 'human' else kind
+            if not valid_slug(slug) or kind not in ('all','codex','claude',HUMAN):
+                raise ValueError("Address another project as '<project>:all', ':claude', ':codex' or ':human'")
+            if slug != project:
+                self._open_project(c, slug)
+            return slug, kind
+        row = c.execute('SELECT project, imported FROM sessions WHERE id=?', (recipient,)).fetchone()
+        if row and row['project'] == project:
+            return project, recipient
+        if row and not row['imported']:
+            self._open_project(c, row['project'])
+            return row['project'], recipient
+        raise ValueError('Unknown recipient in this project (or any other)')
+
+    def _message(self,c,project,sender,recipient,body,task_id=None,crossover_id=None):
         # 'human' is the name to use; 'rohan' is the original id this project
         # shipped with and is kept as an alias so existing rows and any client
         # still sending it keep working. Renaming the stored id would be a data
         # migration, not a rename.
         if recipient == 'human':
             recipient = HUMAN
-        if recipient not in ('all','codex','claude',HUMAN):
-            if not c.execute('SELECT 1 FROM sessions WHERE id=? AND project=?',(recipient,project)).fetchone():
-                raise ValueError('Unknown recipient in this project')
-        if task_id and self.task(c,task_id)['project'] != project:
-            raise ValueError('Task belongs to another project')
+        target, recipient = self._route(c, project, recipient)
+        cross = target != project
+        if task_id:
+            task = self.task(c,task_id)
+            # A message's task always belongs to the project the message is
+            # stored in; across projects, only a task the two share a crossover on.
+            if task['project'] != target or (cross and not self._shares_crossover(c, project, task_id)):
+                raise ValueError('Task belongs to another project')
         mid=ident('m-')
-        c.execute('INSERT INTO messages VALUES(?,?,?,?,?,?,?)',
-                  (mid,project,sender,recipient,text(body,'message'),task_id,now()))
-        self.event(c,project,sender,'message.sent',{'message_id':mid,'recipient':recipient})
-        return {'message_id':mid,'status':'sent','acknowledged':False}
+        c.execute('INSERT INTO messages(id,project,sender,recipient,body,task_id,created) VALUES(?,?,?,?,?,?,?)',
+                  (mid,target,sender,recipient,text(body,'message'),task_id,now()))
+        if cross or crossover_id:
+            c.execute('INSERT INTO message_links VALUES(?,?,?)', (mid, project, crossover_id))
+        data = {'message_id':mid,'recipient':recipient}
+        if cross:
+            data['from_project'] = project
+        self.event(c,target,sender,'message.sent',data)
+        if cross:
+            # Not 'message.sent': the sender's hooks would look for it in their own inbox.
+            self.event(c,project,sender,'message.sent_cross',
+                       {'message_id':mid,'to_project':target,'recipient':recipient})
+        result = {'message_id':mid,'status':'sent','acknowledged':False}
+        if cross:
+            result['to_project'] = target
+        return result
+
+    def _decorate(self, c, messages):
+        """Mark messages that came from another project or a crossover thread.
+
+        Adds from_project/from_name and crossover_id only where they apply, so a
+        local message looks exactly as it always did.
+        """
+        ids = [m['id'] for m in messages]
+        if not ids:
+            return messages
+        links = {r['message_id']: r for r in c.execute(
+            f"SELECT * FROM message_links WHERE message_id IN ({','.join('?' * len(ids))})", ids)}
+        for m in messages:
+            link = links.get(m['id'])
+            if not link:
+                continue
+            if link['origin_project'] != m['project']:
+                m['from_project'] = link['origin_project']
+                sender = c.execute('SELECT name FROM sessions WHERE id=?', (m['sender'],)).fetchone()
+                m['from_name'] = 'Human' if m['sender'] == HUMAN else (sender['name'] if sender else m['sender'])
+            if link['crossover_id']:
+                m['crossover_id'] = link['crossover_id']
+        return messages
 
     def _acknowledge(self,c,s,message_id):
         m=c.execute('SELECT * FROM messages WHERE id=?',(message_id,)).fetchone()
@@ -841,10 +951,10 @@ class Store:
             if wants('inbox'):
                 # Bodies stay whole here: an unread message you cannot read is
                 # the bug this whole parameter exists to fix.
-                out['inbox']=[dict(r) for r in c.execute('''SELECT m.* FROM messages m WHERE project=?
+                out['inbox']=self._decorate(c,[dict(r) for r in c.execute('''SELECT m.* FROM messages m WHERE project=?
                     AND recipient IN ('all',?,?) AND sender!=? AND NOT EXISTS
                     (SELECT 1 FROM receipts r WHERE r.message_id=m.id AND r.session_id=?) ORDER BY created LIMIT 100''',
-                    (s['project'],s['kind'],s['id'],s['id'],s['id']))]
+                    (s['project'],s['kind'],s['id'],s['id'],s['id']))])
             mine=None
             if wants('my_tasks') or wants('counts'):
                 mine=[self.task(c,r['id']) for r in c.execute(
@@ -860,6 +970,8 @@ class Store:
                                'my_open_tasks':sum(1 for t in mine if t['status'] not in ('DONE','CANCELLED')),
                                'project_tasks':c.execute('SELECT COUNT(*) FROM tasks WHERE project=?',(s['project'],)).fetchone()[0],
                                'sessions':c.execute('SELECT COUNT(*) FROM sessions WHERE project=?',(s['project'],)).fetchone()[0]}
+            if wants('crossovers'):
+                out['crossovers']=self._crossovers_for(c,s['project'])
             if wants('board'):
                 out['board']=self._snapshot(c,s['project'])
             return out
@@ -869,8 +981,14 @@ class Store:
         for s in sessions:
             s['stale']=(datetime.now(timezone.utc)-datetime.fromisoformat(s['last_seen'])).total_seconds()>900
         tasks=[self.task(c,r['id']) for r in c.execute('SELECT id FROM tasks WHERE project=? ORDER BY updated DESC',(project,))]
-        messages=[dict(r) for r in c.execute('SELECT * FROM messages WHERE project=? ORDER BY created DESC LIMIT 200',(project,))]
-        for m in messages:
+        messages=self._decorate(c,[dict(r) for r in c.execute('SELECT * FROM messages WHERE project=? ORDER BY created DESC LIMIT 200',(project,))])
+        # Sent from here into another project: stored there, listed here too.
+        outgoing=self._decorate(c,[dict(r) for r in c.execute('''SELECT m.* FROM messages m JOIN message_links l
+            ON l.message_id=m.id WHERE l.origin_project=? AND m.project!=? ORDER BY m.created DESC LIMIT 50''',
+            (project,project))])
+        for m in outgoing:
+            m['to_project']=m['project']
+        for m in messages+outgoing:
             m['acknowledgments']=[dict(r) for r in c.execute('SELECT session_id,acknowledged FROM receipts WHERE message_id=?',(m['id'],))]
         return {'project':project,'sessions':sessions,'tasks':tasks,'messages':messages,
                 'handoff_briefs':self._handoffs(c,project,limit=self.SNAPSHOT_HANDOFF_LIMIT),
@@ -878,6 +996,8 @@ class Store:
                 'events':[dict(r) for r in c.execute('SELECT * FROM events WHERE project=? ORDER BY seq DESC LIMIT 100',(project,))],
                 'shared_locks':[{'resource':r['resource'],'task_id':r['task_id'],'project':r['project']}
                                 for r in c.execute("SELECT * FROM claims WHERE resource LIKE 'service:%' AND project!=?",(project,))],
+                'crossovers':self._crossovers_for(c,project,include_closed=True),
+                'outgoing_messages':outgoing,
                 'generated_at':now()}
 
     def snapshot(self,project):
@@ -895,7 +1015,10 @@ class Store:
                      text(data['next_step'],'next step'),now()))
                 self.event(c,project,'rohan','task.queued',{'task_id':tid})
                 return self.task(c,tid)
-            if action=='message': return self._message(c,project,'rohan',data['recipient'],data['body'],data.get('task_id'))
+            if action=='message':
+                if str(data['recipient']).startswith('x-'):
+                    return self._crossover_message(c,project,'rohan',data['recipient'],data['body'])
+                return self._message(c,project,'rohan',data['recipient'],data['body'],data.get('task_id'))
             if action=='note': return self._note(c,project,'rohan',data['body'],'decision')
             if action=='publish_update':
                 return self._publish_update(c,project,'rohan',data['title'],data['body'],
@@ -953,6 +1076,278 @@ class Store:
             c.execute('UPDATE tasks SET version=version+1,updated=? WHERE id=?',(now(),t['id']))
             self.event(c,project,'rohan','task.'+action,data)
             return self.task(c,t['id'])
+
+    # ---- Crossover: two projects working one piece of work ----------------
+    #
+    # A crossover links one task per project. Each side keeps an ordinary task
+    # in its OWN project, with its own claims, owner and handoffs, so nothing
+    # about claims or project isolation changes for anyone not in one. What the
+    # link adds: members read each other's task, one address (the crossover id)
+    # reaches every member, and no side can finish until every other joined
+    # side has signed off.
+
+    def _crossover_of_task(self, c, task_id):
+        row = c.execute('SELECT crossover_id FROM crossover_members WHERE task_id=?', (task_id,)).fetchone()
+        return row['crossover_id'] if row else None
+
+    def _shares_crossover(self, c, project, task_id):
+        """True when `project` is invited to or joined the crossover `task_id` belongs to."""
+        return c.execute('''SELECT 1 FROM crossover_members mine JOIN crossover_members theirs
+                            ON mine.crossover_id=theirs.crossover_id
+                            WHERE theirs.task_id=? AND mine.project=?''', (task_id, project)).fetchone() is not None
+
+    def _require_signoffs(self, c, crossover_id, task_id):
+        waiting = c.execute('''SELECT m.project, m.task_id FROM crossover_members m JOIN tasks t ON t.id=m.task_id
+                               WHERE m.crossover_id=? AND m.task_id!=? AND m.signed IS NULL
+                               AND t.status!='DONE' ORDER BY m.project''', (crossover_id, task_id)).fetchall()
+        if waiting:
+            who = ', '.join(f"{w['project']} ({w['task_id']})" for w in waiting)
+            raise Conflict(f'Crossover {crossover_id} still needs sign-off from {who}. They call '
+                           'sign_off_crossover (or finish their task); only the human can close around them.')
+
+    def _crossover_row(self, c, crossover_id):
+        row = c.execute('SELECT * FROM crossovers WHERE id=?', (crossover_id,)).fetchone()
+        if not row:
+            raise ValueError(f'Unknown crossover {crossover_id}')
+        return row
+
+    def _crossover_view(self, c, crossover_id):
+        x = self._crossover_row(c, crossover_id)
+        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
+        members = []
+        for m in c.execute('''SELECT * FROM crossover_members WHERE crossover_id=?
+                              ORDER BY project!=?, invited, project''', (crossover_id, x['origin_project'])):
+            item = {'project': m['project'], 'role': 'origin' if m['project'] == x['origin_project'] else 'member',
+                    'task_id': m['task_id'], 'invited': m['invited'], 'invited_by': m['invited_by'],
+                    'joined': m['joined'], 'signed_off': m['signed'] is not None, 'signoff': m['signoff'],
+                    'signed_by': m['signed_by'], 'signed': m['signed']}
+            if m['task_id']:
+                t = c.execute('SELECT title,status,owner FROM tasks WHERE id=?', (m['task_id'],)).fetchone()
+                owner = c.execute('SELECT name,kind,last_seen FROM sessions WHERE id=?',
+                                  (t['owner'],)).fetchone() if t and t['owner'] else None
+                item.update({'task_title': t['title'] if t else '', 'task_status': t['status'] if t else 'MISSING',
+                             'owner': t['owner'] if t else None,
+                             'owner_name': owner['name'] if owner else '',
+                             'owner_kind': owner['kind'] if owner else '',
+                             'owner_stale': (owner['last_seen'] <= cutoff) if owner else True})
+            members.append(item)
+        joined = [m for m in members if m['task_id']]
+        if joined and all(m['task_status'] == 'DONE' for m in joined):
+            status = 'closed'
+        elif len(joined) > 1 and all(m['signed_off'] for m in joined):
+            status = 'validated'
+        else:
+            status = 'open'
+        return {'id': x['id'], 'title': x['title'], 'origin_project': x['origin_project'],
+                'origin_task': x['origin_task'], 'created_by': x['created_by'],
+                'created': x['created'], 'updated': x['updated'], 'status': status, 'members': members,
+                'awaiting_signoff': [m['project'] for m in joined
+                                     if not m['signed_off'] and m['task_status'] != 'DONE'],
+                'awaiting_join': [m['project'] for m in members if not m['task_id']],
+                'talk': f'send_message(recipient="{x["id"]}") reaches every other member'}
+
+    def _crossovers_for(self, c, project, include_closed=False, limit=20):
+        ids = [r[0] for r in c.execute('''SELECT x.id FROM crossovers x JOIN crossover_members m
+                                          ON m.crossover_id=x.id WHERE m.project=? ORDER BY x.updated DESC''',
+                                       (project,))]
+        views = [self._crossover_view(c, xid) for xid in ids]
+        if not include_closed:
+            views = [v for v in views if v['status'] != 'closed']
+        return views[:limit]
+
+    def _crossover_recipients(self, c, crossover_id, sender):
+        return [r['owner'] for r in c.execute('''SELECT t.owner FROM crossover_members m
+                    JOIN tasks t ON t.id=m.task_id WHERE m.crossover_id=? AND t.owner IS NOT NULL
+                    AND t.owner!=? GROUP BY t.owner ORDER BY MIN(m.invited)''', (crossover_id, sender))]
+
+    def _crossover_message(self, c, project, sender, crossover_id, body):
+        """One message per other member: the owner of each joined task hears it."""
+        self._crossover_row(c, crossover_id)
+        if not c.execute('SELECT 1 FROM crossover_members WHERE crossover_id=? AND project=?',
+                         (crossover_id, project)).fetchone():
+            raise PermissionError(f'Project {project} is not part of crossover {crossover_id}')
+        recipients = self._crossover_recipients(c, crossover_id, sender)
+        if not recipients:
+            raise ValueError(f'Nobody else has joined crossover {crossover_id} yet; '
+                             'message the invited session or project directly')
+        ids = [self._message(c, project, sender, owner, body, None, crossover_id)['message_id']
+               for owner in recipients]
+        return {'message_id': ids[0], 'message_ids': ids, 'recipients': recipients,
+                'status': 'sent', 'acknowledged': False}
+
+    def _crossover_notice(self, c, crossover_id, session, body):
+        """A best-effort note to the other members; silent when nobody else joined."""
+        if self._crossover_recipients(c, crossover_id, session['id']):
+            self._crossover_message(c, session['project'], session['id'], crossover_id, body)
+
+    def start_crossover(self, key, task_id, invite, note=''):
+        """Open a crossover from a task you own, inviting other projects or their sessions.
+
+        Calling it again on a task that is already in a crossover invites more
+        projects into that same crossover (and re-sends a pending invite).
+        """
+        if isinstance(invite, str):
+            invite = [invite]
+        if not isinstance(invite, list) or not invite or len(invite) > 20:
+            raise ValueError('Invite 1–20 other projects (slug) or sessions (s-… id)')
+        note = (note or '').strip()
+        if len(note) > 4000:
+            raise ValueError('Keep the invite note under 4000 characters')
+        with self.connection(True) as c:
+            s = self.auth(c, key)
+            t = self.task(c, task_id)
+            if t['project'] != s['project'] or t['owner'] != s['id']:
+                raise PermissionError('Only the owner of a task in your project can open a crossover from it')
+            if t['status'] == 'DONE':
+                raise Conflict('Completed task; start the crossover from an open task')
+            targets = []
+            for item in invite:
+                item = text(item, 'invite', 120)
+                if item.startswith('s-'):
+                    row = c.execute('SELECT project FROM sessions WHERE id=? AND imported=0', (item,)).fetchone()
+                    if not row:
+                        raise ValueError(f'Unknown session {item}')
+                    target = (row['project'], item)
+                elif valid_slug(item):
+                    target = (item, None)
+                else:
+                    raise ValueError(f'Invite a project slug or a session id, not {item!r}')
+                if target[0] == s['project']:
+                    raise ValueError(f'{item} is in your own project; a crossover invites another project. '
+                                     'Inside your project use send_message or a handoff.')
+                self._open_project(c, target[0])
+                targets.append(target)
+            crossover_id = self._crossover_of_task(c, task_id)
+            stamp = now()
+            if not crossover_id:
+                crossover_id = ident('x-')
+                c.execute('INSERT INTO crossovers VALUES(?,?,?,?,?,?,?)',
+                          (crossover_id, t['title'], s['project'], task_id, s['id'], stamp, stamp))
+                c.execute('''INSERT INTO crossover_members(crossover_id,project,task_id,invited_by,invited,joined,joined_by)
+                             VALUES(?,?,?,?,?,?,?)''', (crossover_id, s['project'], task_id, s['id'], stamp, stamp, s['id']))
+                self.event(c, s['project'], s['id'], 'crossover.started', {'crossover_id': crossover_id, 'task_id': task_id})
+            sent = []
+            for project, session_id in targets:
+                member = c.execute('SELECT task_id FROM crossover_members WHERE crossover_id=? AND project=?',
+                                   (crossover_id, project)).fetchone()
+                if member and member['task_id']:
+                    continue   # already joined
+                if not member:
+                    c.execute('''INSERT INTO crossover_members(crossover_id,project,invited_by,invited)
+                                 VALUES(?,?,?,?)''', (crossover_id, project, s['id'], stamp))
+                body = (f'CROSSOVER INVITE {crossover_id} from project {s["project"]}: {s["name"]} ({s["id"]}) '
+                        f'asks your project to work with them on "{t["title"]}" (their task {task_id}).\n'
+                        + (f'{note}\n' if note else '') +
+                        f'Join: join_crossover(crossover_id="{crossover_id}", next_step="...", '
+                        'resources=["paths in YOUR repo"]) creates your own claimed task, or pass '
+                        'task_id="<an open task you own>" to link work already claimed.\n'
+                        f'Talk: send_message(recipient="{crossover_id}") reaches every member; '
+                        f'send_message(recipient="{s["id"]}") reaches the inviter directly.\n'
+                        'Finish: every joined side signs off (sign_off_crossover, or DONE with validation) '
+                        'before any side can mark its task DONE.\n'
+                        'Tools missing? Reconnect the project-desk MCP server (/mcp) or use the desk CLI.')
+                sent.append(self._message(c, s['project'], s['id'], session_id or f'{project}:all', body,
+                                          None, crossover_id)['message_id'])
+                self.event(c, project, s['id'], 'crossover.invited',
+                           {'crossover_id': crossover_id, 'from_project': s['project']})
+            c.execute('UPDATE crossovers SET updated=? WHERE id=?', (stamp, crossover_id))
+            view = self._crossover_view(c, crossover_id)
+            view['invite_message_ids'] = sent
+            return view
+
+    def join_crossover(self, key, crossover_id, next_step, resources=None, task_id=None, title=''):
+        """Join a crossover your project was invited to, with a new or an existing task of yours."""
+        with self.connection(True) as c:
+            s = self.auth(c, key)
+            x = self._crossover_row(c, crossover_id)
+            member = c.execute('SELECT * FROM crossover_members WHERE crossover_id=? AND project=?',
+                               (crossover_id, s['project'])).fetchone()
+            if not member:
+                raise PermissionError(f'Your project {s["project"]} is not invited to {crossover_id}; '
+                                      'a member can invite it with start_crossover')
+            if member['task_id']:
+                raise Conflict(f'Your project already joined {crossover_id} with task {member["task_id"]}; '
+                               "message the crossover, or ask that task's owner for a handoff")
+            if task_id:
+                t = self.task(c, task_id)
+                if t['project'] != s['project'] or t['owner'] != s['id']:
+                    raise PermissionError('Link only an open task you own in your own project')
+                if t['status'] == 'DONE':
+                    raise Conflict('Completed task; join with a new task instead')
+                other = self._crossover_of_task(c, task_id)
+                if other:
+                    raise Conflict(f'Task {task_id} is already in crossover {other}')
+            else:
+                if resources is None:
+                    raise ValueError('Give resources (paths in your own repo) for a new task, '
+                                     'or task_id of an open task you own')
+                resources = scopes(resources)
+                label = (title or '').strip() or f'Crossover {crossover_id}: {x["title"]}'
+                task_id = self._insert_task(c, s, label[:300], resources, next_step)
+                self.claim_resources(c, s['project'], task_id, resources)
+                self.event(c, s['project'], s['id'], 'task.claimed', {'task_id': task_id, 'resources': resources})
+            stamp = now()
+            c.execute('UPDATE crossover_members SET task_id=?,joined=?,joined_by=? WHERE crossover_id=? AND project=?',
+                      (task_id, stamp, s['id'], crossover_id, s['project']))
+            c.execute('UPDATE crossovers SET updated=? WHERE id=?', (stamp, crossover_id))
+            self.event(c, s['project'], s['id'], 'crossover.joined', {'crossover_id': crossover_id, 'task_id': task_id})
+            joined_task = self.task(c, task_id)
+            self._crossover_notice(c, crossover_id, s,
+                f'{s["name"]} ({s["id"]}, project {s["project"]}) joined crossover {crossover_id} with task '
+                f'{task_id}: {joined_task["title"]}. Paths: {", ".join(joined_task["resources"])}. '
+                f'Next: {joined_task["next_step"]}')
+            return self._crossover_view(c, crossover_id)
+
+    def sign_off_crossover(self, key, crossover_id, validation):
+        """Record your side's validation of the joint work. The owner of your side's task signs."""
+        validation = text(validation, 'validation evidence')
+        with self.connection(True) as c:
+            s = self.auth(c, key)
+            self._crossover_row(c, crossover_id)
+            member = c.execute('SELECT * FROM crossover_members WHERE crossover_id=? AND project=?',
+                               (crossover_id, s['project'])).fetchone()
+            if not member or not member['task_id']:
+                raise PermissionError(f'Your project has not joined {crossover_id}')
+            t = self.task(c, member['task_id'])
+            if t['owner'] != s['id']:
+                raise PermissionError(f'Only the owner of {t["id"]} signs off for {s["project"]}')
+            stamp = now()
+            c.execute('UPDATE crossover_members SET signoff=?,signed_by=?,signed=? WHERE crossover_id=? AND project=?',
+                      (validation, s['id'], stamp, crossover_id, s['project']))
+            c.execute('UPDATE crossovers SET updated=? WHERE id=?', (stamp, crossover_id))
+            self.event(c, s['project'], s['id'], 'crossover.signed_off', {'crossover_id': crossover_id, 'task_id': t['id']})
+            view = self._crossover_view(c, crossover_id)
+            notice = f'SIGN-OFF {crossover_id} from {s["project"]} ({s["name"]}, task {t["id"]}): {validation}'
+            if view['status'] == 'validated':
+                notice += '\nAll sides validated. Each side may now mark its task DONE.'
+            elif view['awaiting_signoff']:
+                notice += f'\nStill waiting on: {", ".join(view["awaiting_signoff"])}.'
+            self._crossover_notice(c, crossover_id, s, notice)
+            return view
+
+    def list_peers(self, key, project='', hours=24):
+        """Who you can talk to: the projects on this desk, or one project's recent sessions."""
+        if not isinstance(hours, int) or not 1 <= hours <= 720:
+            raise ValueError('hours must be 1–720')
+        with self.connection() as c:
+            s = self.auth(c, key)
+            cutoff15 = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
+            if not project:
+                return {'your_project': s['project'], 'projects': [
+                    {'slug': r['slug'], 'name': r['name'], 'yours': r['slug'] == s['project'],
+                     'live_sessions': c.execute('''SELECT COUNT(*) FROM sessions WHERE project=?
+                                                   AND imported=0 AND last_seen>?''',
+                                                (r['slug'], cutoff15)).fetchone()[0]}
+                    for r in c.execute('SELECT slug,name FROM projects WHERE archived=0 ORDER BY name').fetchall()]}
+            self._open_project(c, project)
+            cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+            sessions = [dict(r) for r in c.execute(
+                '''SELECT id,name,kind,branch,last_seen FROM sessions WHERE project=? AND imported=0
+                   AND last_seen>? ORDER BY last_seen DESC LIMIT 50''', (project, cutoff))]
+            for item in sessions:
+                item['stale'] = item['last_seen'] <= cutoff15
+            return {'project': project, 'sessions': sessions,
+                    'talk': f'send_message(recipient="<session id>") or recipient="{project}:all|claude|codex"'}
 
     def backup(self,directory):
         directory=Path(directory); directory.mkdir(parents=True,exist_ok=True)

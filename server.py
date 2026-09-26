@@ -29,6 +29,10 @@ agents (Claude Code, Codex, and any other MCP client) working on a codebase.
 Register one identity per real session; keep session_key private. Your project is named in
 .project-desk.json at your repo root: omit project in register_session and the desk resolves it.
 Agents work only in their own project; the desk refuses a project the worktree does not declare.
+Crossover, for work that spans projects: send_message reaches another project's session by its id
+or '<project>:all|claude|codex'; list_peers shows who is there. For shared work, start_crossover
+from your task invites the other project; it joins with its own task (join_crossover), the
+crossover id reaches every member, and every side signs off (sign_off_crossover) before any is DONE.
 Check in before edits and at milestones.
 Claim literal relative file/directory paths before editing. Conflicts mean stop overlapping work.
 Before you plan around a file, would_conflict tells you who holds it without claiming it.
@@ -116,6 +120,7 @@ def create_app(db=None, roster=None):
           counts    unread/task/session totals only
           events    the event log since your cursor
           board     the full snapshot (what the dashboard and the hooks read)
+          crossovers  open crossovers your project is invited to or joined
         A typical agent turn wants include=["inbox","counts"].
         To learn who holds a path, use would_conflict — not a check_in section."""
         return store.check_in(session_key,since,include)
@@ -162,8 +167,36 @@ def create_app(db=None, roster=None):
 
     @mcp.tool()
     def send_message(session_key:str,recipient:str,body:str,task_id:str|None=None)->dict:
-        """Send to a session ID, codex, claude, rohan, or all. Sent is not acknowledged; broadcast receipts are per session."""
+        """Send to a session ID, codex, claude, rohan, or all. Sent is not acknowledged; broadcast receipts are per session.
+        Across projects: a session ID registered in another project, '<project>:all|claude|codex|human',
+        or a crossover id (x-...) to reach every other member of that crossover."""
         return store.message(session_key,recipient,body,task_id)
+
+    @mcp.tool()
+    def list_peers(session_key:str,project:str='',hours:int=24)->dict:
+        """Who you can talk to. No project: every project on this desk. With a project: its sessions
+        seen in the last `hours`, with the id to message. Read-only."""
+        return store.list_peers(session_key,project,hours)
+
+    @mcp.tool()
+    def start_crossover(session_key:str,task_id:str,invite:list[str],note:str='')->dict:
+        """Open a crossover from an open task you own and invite other projects (slug) or their
+        sessions (s-... id) to work it with you. Each invitee joins with its own task in its own
+        project. Calling it again on the same task invites more. Returns the crossover id (x-...)."""
+        return store.start_crossover(session_key,task_id,invite,note)
+
+    @mcp.tool()
+    def join_crossover(session_key:str,crossover_id:str,next_step:str,resources:list[str]|None=None,
+                       task_id:str|None=None,title:str='')->dict:
+        """Join a crossover your project was invited to. Give resources (paths in YOUR repo) to claim a
+        new task for your side, or task_id of an open task you own to link it. Claims stay per project."""
+        return store.join_crossover(session_key,crossover_id,next_step,resources,task_id,title)
+
+    @mcp.tool()
+    def sign_off_crossover(session_key:str,crossover_id:str,validation:str)->dict:
+        """Record your side's validation of the joint work (owner of your side's task). No side can mark
+        its task DONE until every other joined side has signed off or finished; DONE counts as sign-off."""
+        return store.sign_off_crossover(session_key,crossover_id,validation)
 
     @mcp.tool()
     def acknowledge_message(session_key:str,message_id:str|None=None,message_ids:list[str]|None=None)->dict:
