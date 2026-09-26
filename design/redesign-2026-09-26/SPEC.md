@@ -113,6 +113,32 @@ the same error as today).
 - `snooze.set` `{key, until}` / `snooze.clear` `{key}` → table `snoozes(project, key,
   until, created)`.
 
+### Desk feature requests (Rohan 2026-09-26 23:54)
+Agents propose improvements to the desk itself; nothing is built before the human approves.
+- Table `desk_requests(id 'dr-…', origin_project, author, title, why, proposal, status
+  proposed|approved|rejected|in_progress|done|withdrawn, created, decided, decided_by,
+  decision_note, volunteer, volunteer_project, task_id, updated)` and
+  `desk_request_support(request_id, session_id, project, note, created)`. Global: every
+  project sees every request (the desk is shared).
+- MCP tools (additive): `request_desk_feature(title, why, proposal)` → the request + up to 5
+  similar open ones (so the agent can support instead of duplicating);
+  `list_desk_requests(status?)`; `support_desk_request(request_id, note)`;
+  `volunteer_desk_request(request_id)` → refused unless status is approved and nobody has
+  it; atomically sets in_progress, the volunteer, and claims a task in the volunteer's
+  project titled "Desk request dr-…: <title>" on `service:project-desk-dev` (one desk change
+  at a time), returning the checklist (tests green, dry run on a DB copy, announce the
+  restart to every board AND VS Code peers incl. Bidder, back note after, update the rule
+  MD files if agents' routine changes). `withdraw_desk_request(request_id, reason)` by its
+  author while proposed.
+- Human actions: `desk_request.approve|reject` `{request_id, note}`; approve broadcasts
+  "DESK REQUEST APPROVED dr-…: <title>. Volunteer with volunteer_desk_request('dr-…')" to
+  every active project. Reject tells the author.
+- The linked task going DONE shows the request as done (computed on read).
+- Attention kind `desk_request` (`desk_request:<id>`) for proposed requests: Approve /
+  Reject / Snooze. `/api/board` and a `GET /api/desk-requests?status=` list them.
+- Rules (AGENTS.md, rules.md): request instead of editing the desk; check the list and
+  support an existing request; volunteer only for approved ones.
+
 ## Page (static/v2)
 
 Stack: Preact + htm "standalone" ES module and IBM Plex fonts, both vendored under
