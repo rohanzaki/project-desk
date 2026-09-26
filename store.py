@@ -12,9 +12,10 @@ from uuid import uuid4
 from projects import DECLARATION, DEFAULT_DESK, display_name, resolve_project, valid_slug
 from deskcore import Conflict, HUMAN, ident, now, overlaps, scopes, text  # noqa: F401  (re-exported)
 from desk_features import FeaturesMixin, MESSAGE_KINDS, infer_kind
+from desk_board import BoardMixin
 
 
-class Store(FeaturesMixin):
+class Store(FeaturesMixin, BoardMixin):
     CONTEXT_COMMENT_LIMIT = 50
     CONTEXT_HANDOFF_LIMIT = 20
     SNAPSHOT_HANDOFF_LIMIT = 100
@@ -108,6 +109,7 @@ class Store(FeaturesMixin):
                 CREATE INDEX IF NOT EXISTS crossover_members_task ON crossover_members(task_id);
             ''')
             self._migrate_features(c)
+            self._migrate_board(c)
             self._sync_registry(c)
         self.path.chmod(0o600)
 
@@ -432,31 +434,42 @@ class Store(FeaturesMixin):
 
     def claim(self, key, title, resources, next_step, task_id=None):
         resources = scopes(resources)
-        with self.connection(True) as c:
-            s = self.auth(c, key)
-            if task_id:
-                t = self.task(c, task_id)
-                if t['project'] != s['project'] or t['owner'] or t['status'] != 'QUEUED':
-                    raise Conflict('Task is not an unowned queued task in your project')
-                if t['assigned_to'] not in ('', s['kind'], s['id']):
-                    raise Conflict('Task is assigned to another agent')
-                if t['human_paused']:
-                    raise Conflict('The human owner paused this task')
-                # Preserve the queued scope; expanding it requires an explicit update later.
-                if resources != t['resources']:
-                    raise Conflict('Claim the queued task using its exact resources')
-                c.execute("UPDATE tasks SET owner=?,status='RUNNING',updated=?,version=version+1 WHERE id=?",
-                          (s['id'], now(), task_id))
-            else:
-                task_id = self._insert_task(c, s, title, resources, next_step)
-            self.claim_resources(c, s['project'], task_id, resources)
-            self.event(c,s['project'],s['id'],'task.claimed', {'task_id': task_id, 'resources':resources})
-            self._log(c, task_id, s['project'], s['id'], 'claimed', f"Claimed by {s['name']}: {', '.join(resources)}")
-            self._drop_from_queues(c, s['id'], resources)
-            self._notify_queues(c)
-            result = self.task(c, task_id)
-            result['lessons'] = self._lessons_for_paths(c, s['project'], resources)
-            return result
+        s = None
+        refusal_title = title
+        try:
+            with self.connection(True) as c:
+                s = self.auth(c, key)
+                if task_id:
+                    t = self.task(c, task_id)
+                    if t['project'] != s['project'] or t['owner'] or t['status'] != 'QUEUED':
+                        raise Conflict('Task is not an unowned queued task in your project')
+                    if t['assigned_to'] not in ('', s['kind'], s['id']):
+                        raise Conflict('Task is assigned to another agent')
+                    if t['human_paused']:
+                        raise Conflict('The human owner paused this task')
+                    # Preserve the queued scope; expanding it requires an explicit update later.
+                    if resources != t['resources']:
+                        raise Conflict('Claim the queued task using its exact resources')
+                    refusal_title = t['title']
+                    c.execute("UPDATE tasks SET owner=?,status='RUNNING',updated=?,version=version+1 WHERE id=?",
+                              (s['id'], now(), task_id))
+                else:
+                    task_id = self._insert_task(c, s, title, resources, next_step)
+                self.claim_resources(c, s['project'], task_id, resources)
+                self.event(c,s['project'],s['id'],'task.claimed', {'task_id': task_id, 'resources':resources})
+                self._log(c, task_id, s['project'], s['id'], 'claimed', f"Claimed by {s['name']}: {', '.join(resources)}")
+                self._drop_from_queues(c, s['id'], resources)
+                self._notify_queues(c)
+                result = self.task(c, task_id)
+                result['lessons'] = self._lessons_for_paths(c, s['project'], resources)
+                return result
+        except Conflict as e:
+            # The failing transaction above has already rolled back. Record the
+            # refusal (if this was an overlap) in its own, separate transaction,
+            # then re-raise the SAME Conflict — the agent's error text never changes.
+            if s is not None and str(e).startswith('Resource overlaps'):
+                self._record_refusal(s, refusal_title, resources, str(e))
+            raise
 
     def _insert_task(self, c, s, title, resources, next_step):
         task_id = ident('t-')
@@ -1115,6 +1128,79 @@ class Store(FeaturesMixin):
                 c.execute('INSERT OR IGNORE INTO receipts VALUES(?,?,?)',(m['id'],'rohan',now()))
                 self.event(c,project,'rohan','message.acknowledged',{'message_id':m['id']})
                 return {'ok':True}
+            if action=='ack.inbox':
+                # Every unread broadcast ('all') for the human in this project, in one call.
+                # Mail addressed to the human directly is untouched (read those with 'ack').
+                kinds=data.get('kinds')
+                query=("SELECT m.id FROM messages m LEFT JOIN message_meta mm ON mm.message_id=m.id "
+                       "WHERE m.project=? AND m.recipient='all' AND m.sender!=? AND NOT EXISTS "
+                       "(SELECT 1 FROM receipts r WHERE r.message_id=m.id AND r.session_id=?)")
+                args=[project,HUMAN,HUMAN]
+                if kinds:
+                    if isinstance(kinds,str): kinds=[kinds]
+                    unknown=sorted(set(kinds)-set(MESSAGE_KINDS))
+                    if unknown: raise ValueError(f"Unknown kind(s) {', '.join(unknown)}; kinds: {', '.join(MESSAGE_KINDS)}")
+                    marks=','.join('?'*len(kinds))
+                    query+=f" AND COALESCE(mm.kind,'message') IN ({marks})"
+                    args+=list(kinds)
+                ids=[r[0] for r in c.execute(query,args)]
+                stamp=now()
+                c.executemany('INSERT OR IGNORE INTO receipts VALUES(?,?,?)',[(mid,HUMAN,stamp) for mid in ids])
+                if ids: self.event(c,project,HUMAN,'inbox.acknowledged',{'count':len(ids),'kinds':kinds})
+                return {'acknowledged':len(ids)}
+            if action=='answer':
+                # Reply to the asker; reply_to marks their question answered. also_decision
+                # additionally records a decision note so every agent's hook shows it.
+                message_id=data['message_id']
+                orig=c.execute('SELECT * FROM messages WHERE id=? AND project=?',(message_id,project)).fetchone()
+                if not orig: raise ValueError('Unknown message')
+                body=text(data['body'],'answer')
+                sent=self._message(c,project,HUMAN,orig['sender'],body,orig['task_id'],reply_to=message_id)
+                if data.get('also_decision'):
+                    self._note(c,project,'rohan',body,'decision')
+                return sent
+            if action in ('refusal.dismiss','refusal.queue','refusal.handoff'):
+                refusal=c.execute('SELECT * FROM refusals WHERE id=? AND project=?',(data.get('refusal_id',''),project)).fetchone()
+                if not refusal: raise ValueError('Unknown refusal')
+                if refusal['status']!='open': raise Conflict('Refusal already resolved')
+                note=(data.get('note') or '').strip()[:1000]
+                resources=json.loads(refusal['resources'])
+                if action=='refusal.dismiss':
+                    new_status='dismissed'
+                elif action=='refusal.queue':
+                    new_status='queued'
+                    if resources:
+                        c.execute('''INSERT OR IGNORE INTO resource_queue(resource,session_id,project,note,created)
+                                     VALUES(?,?,?,?,?)''',(resources[0],refusal['session_id'],refusal['project'],note,now()))
+                        self._notify_queues(c)
+                else:
+                    new_status='handoff_asked'
+                    if refusal['holder_session']:
+                        body=(f"HANDOFF REQUEST: {self._display_name(c,refusal['session_id'])} was refused "
+                              f"{', '.join(resources)} (holder task {refusal['holder_task_id']}). "
+                              +(note or 'Please offer a handoff or finish up.'))
+                        self._message(c,refusal['holder_project'] or project,HUMAN,refusal['holder_session'],
+                                     body,refusal['holder_task_id'] or None,kind='handoff')
+                c.execute('UPDATE refusals SET status=?,resolved=?,resolved_by=? WHERE id=?',
+                         (new_status,now(),HUMAN,refusal['id']))
+                self.event(c,project,HUMAN,'refusal.'+action.split('.')[1],
+                          {'refusal_id':refusal['id'],'status':new_status})
+                return {'refusal_id':refusal['id'],'status':new_status}
+            if action=='snooze.set':
+                key_=text(data.get('key',''),'snooze key',200)
+                until=data.get('until','')
+                try: datetime.fromisoformat(until)
+                except (TypeError,ValueError): raise ValueError('until must be an ISO timestamp')
+                c.execute('''INSERT INTO snoozes(project,key,until,created) VALUES(?,?,?,?)
+                             ON CONFLICT(project,key) DO UPDATE SET until=excluded.until,created=excluded.created''',
+                          (project,key_,until,now()))
+                self.event(c,project,HUMAN,'snooze.set',{'key':key_,'until':until})
+                return {'key':key_,'until':until}
+            if action=='snooze.clear':
+                key_=text(data.get('key',''),'snooze key',200)
+                c.execute('DELETE FROM snoozes WHERE project=? AND key=?',(project,key_))
+                self.event(c,project,HUMAN,'snooze.clear',{'key':key_})
+                return {'key':key_,'cleared':True}
             t=self.task(c,data['task_id'])
             if t['project']!=project: raise ValueError('Wrong project')
             if t['version']!=data['version']: raise Conflict('Task changed; refresh before acting')

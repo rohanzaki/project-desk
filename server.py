@@ -5,6 +5,7 @@ import logging
 import os
 import subprocess
 import threading
+from datetime import datetime
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -470,6 +471,80 @@ def create_app(db=None, roster=None, announce=None):
         return JSONResponse({'status':'ok','service':'project-desk','version':'1.1.0'})
     async def snapshot(request):
         return JSONResponse(store.snapshot(request.query_params.get('project',PROJECT)))
+
+    # ---- dashboard v2: bounded read endpoints (see design/redesign-2026-09-26/SPEC.md) ----
+
+    def _qint(params,name,default=None):
+        raw=params.get(name)
+        if raw is None: return default,None
+        try: return int(raw),None
+        except ValueError: return None,f'{name} must be an integer'
+
+    async def board(request):
+        params=request.query_params
+        project=params.get('project',PROJECT)
+        done_days,err=_qint(params,'done_days',7)
+        if err: return JSONResponse({'error':err},400)
+        if not 0<=done_days<=3650: return JSONResponse({'error':'done_days must be 0-3650'},400)
+        etag=store.board_etag()
+        if request.headers.get('if-none-match')==etag:
+            return Response(status_code=304,headers={'ETag':etag})
+        data=store.board(project,done_days)
+        return JSONResponse(data,headers={'ETag':data['version']})
+
+    async def task_route(request):
+        params=request.query_params
+        project=params.get('project',PROJECT)
+        task_id=params.get('id')
+        if not task_id: return JSONResponse({'error':'id is required'},400)
+        try: return JSONResponse(store.task_detail(project,task_id))
+        except ValueError as e: return JSONResponse({'error':str(e)},400)
+
+    async def attention(request):
+        params=request.query_params
+        projects=params.get('projects','all')
+        include_snoozed=params.get('include_snoozed','0')=='1'
+        try: return JSONResponse(store.attention(projects,include_snoozed))
+        except ValueError as e: return JSONResponse({'error':str(e)},400)
+
+    async def digest(request):
+        params=request.query_params
+        project=params.get('project',PROJECT)
+        since=params.get('since')
+        if not since: return JSONResponse({'error':'since is required'},400)
+        try: datetime.fromisoformat(since)
+        except ValueError: return JSONResponse({'error':'since must be an ISO timestamp'},400)
+        return JSONResponse(store.digest(project,since))
+
+    async def search(request):
+        params=request.query_params
+        project=params.get('project',PROJECT)
+        q=params.get('q','')
+        try: return JSONResponse(store.search(project,q))
+        except ValueError as e: return JSONResponse({'error':str(e)},400)
+
+    async def events_route(request):
+        params=request.query_params
+        project=params.get('project',PROJECT)
+        before,err=_qint(params,'before',None)
+        if err: return JSONResponse({'error':err},400)
+        limit,err=_qint(params,'limit',50)
+        if err: return JSONResponse({'error':err},400)
+        return JSONResponse(store.events_page(project,before,limit))
+
+    async def lanes(request):
+        params=request.query_params
+        project=params.get('project',PROJECT)
+        hours,err=_qint(params,'hours',12)
+        if err: return JSONResponse({'error':err},400)
+        if not 1<=hours<=24*30: return JSONResponse({'error':'hours must be 1-720'},400)
+        return JSONResponse(store.lanes(project,hours))
+
+    async def v2(request):
+        path=ROOT/'static/v2/index.html'
+        if not path.exists(): return PlainTextResponse('Not found',404)
+        return FileResponse(path)
+
     async def action(request):
         try:
             body=await request.json()
@@ -558,6 +633,9 @@ def create_app(db=None, roster=None, announce=None):
 
     mcp_app=mcp.streamable_http_app()
     app=Starlette(routes=[Route('/',index),Route('/health',health),Route('/api/state',snapshot),
+                        Route('/api/board',board),Route('/api/task',task_route),Route('/api/attention',attention),
+                        Route('/api/digest',digest),Route('/api/search',search),Route('/api/events',events_route),
+                        Route('/api/lanes',lanes),Route('/v2',v2),
                         Route('/api/action',action,methods=['POST']),
                         Route('/api/projects',projects_list),Route('/api/projects/{slug}/connect',connect),
                         Route('/projects',index),Route('/p/{slug}',index),Route('/p/{slug}/onboard',onboard),
