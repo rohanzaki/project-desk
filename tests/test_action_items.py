@@ -49,8 +49,9 @@ def test_finishing_a_task_saves_what_is_left_for_the_human(desk):
 
 def test_items_for_agents_and_for_one_session(desk):
     d, a, b = desk
-    d.add_action_items(a['session_key'], ['Refresh the onboarding kit after the next restart'], assignee='agents')
-    d.add_action_items(a['session_key'], ['Review src/feature before merge'], assignee=b['session_id'])
+    t = d.claim(a['session_key'], 'T', ['src/t'], 'x')
+    d.add_action_items(a['session_key'], ['Refresh the onboarding kit after the next restart'], t['id'], 'agents')
+    d.add_action_items(a['session_key'], ['Review src/feature before merge'], t['id'], b['session_id'])
     for_b = d.check_in(b['session_key'], include=['action_items'])['action_items']['for_me']
     assert sorted(i['body'] for i in for_b) == ['Refresh the onboarding kit after the next restart',
                                                 'Review src/feature before merge']
@@ -62,8 +63,9 @@ def test_items_for_agents_and_for_one_session(desk):
 def test_resolving_and_who_may(desk, tmp_path):
     d, a, b = desk
     outsider = d.register('beta agent', 'claude', '', 'main', declared(tmp_path, 'beta'))
-    human_item = d.add_action_items(a['session_key'], ['Approve the budget'])['items'][0]
-    mine_for_b = d.add_action_items(a['session_key'], ['Check the logs'], assignee=b['session_id'])['items'][0]
+    t = d.claim(a['session_key'], 'T', ['src/t'], 'x')
+    human_item = d.add_action_items(a['session_key'], ['Approve the budget'], t['id'])['items'][0]
+    mine_for_b = d.add_action_items(a['session_key'], ['Check the logs'], t['id'], b['session_id'])['items'][0]
     with pytest.raises(PermissionError):
         d.resolve_action_item(outsider['session_key'], mine_for_b['id'])
     with pytest.raises(PermissionError):   # b neither wrote nor holds the human's item
@@ -84,16 +86,17 @@ def test_resolving_and_who_may(desk, tmp_path):
 def test_cross_project_items_land_on_the_other_board(desk, tmp_path):
     d, a, b = desk
     outsider = d.register('beta agent', 'claude', '', 'main', declared(tmp_path, 'beta'))
-    item = d.add_action_items(a['session_key'], ['Commit the regenerated Project Desk blocks'],
+    t = d.claim(a['session_key'], 'T', ['src/t'], 'x')
+    item = d.add_action_items(a['session_key'], ['Commit the regenerated Project Desk blocks'], t['id'],
                               assignee='beta:agents')['items'][0]
     assert item['project'] == 'beta' and item['origin_project'] == 'alpha'
     assert [i['id'] for i in d.check_in(outsider['session_key'], include=['action_items'])['action_items']['for_me']] == [item['id']]
     assert any(i['id'] == item['id'] for i in d.snapshot('alpha')['action_items'])   # the sender sees it too
     assert d.resolve_action_item(outsider['session_key'], item['id'])['status'] == 'done'
-    with pytest.raises(ValueError):
-        d.add_action_items(a['session_key'], ['x'], assignee='nowhere:agents')
-    with pytest.raises(ValueError):
-        d.add_action_items(a['session_key'], ['x'], assignee='beta:everyone')
+    with pytest.raises(ValueError, match='Unknown project'):
+        d.add_action_items(a['session_key'], ['x'], t['id'], assignee='nowhere:agents')
+    with pytest.raises(ValueError, match='human'):
+        d.add_action_items(a['session_key'], ['x'], t['id'], assignee='beta:everyone')
 
 
 def test_validation_and_duplicates(desk, tmp_path):
@@ -104,7 +107,7 @@ def test_validation_and_duplicates(desk, tmp_path):
     assert len(first) == 1 and again == []
     for bad in ([], ['x'] * 21, [''], 'x' * 700):
         with pytest.raises(ValueError):
-            d.add_action_items(a['session_key'], bad)
+            d.add_action_items(a['session_key'], bad, t['id'])
     other = d.register('beta agent', 'claude', '', 'main', declared(tmp_path, 'beta'))
     beta_task = d.claim(other['session_key'], 'Beta', ['src'], 'x')
     with pytest.raises(ValueError):
@@ -148,7 +151,82 @@ def test_mcp_tools(tmp_path, monkeypatch):
         assert not result.get('isError'), result
         return result.get('structuredContent') or json.loads(result['content'][0]['text'])
 
+    t = app.state.store.claim(a['session_key'], 'T', ['src/t'], 'x')
     with TestClient(app) as client:
-        made = call(client, 'add_action_items', {'session_key': a['session_key'], 'items': ['Left for you: restart']})
+        made = call(client, 'add_action_items', {'session_key': a['session_key'], 'items': ['Left for you: restart'],
+                                                 'task_id': t['id']})
         item = made['items'][0]
         assert call(client, 'resolve_action_item', {'session_key': a['session_key'], 'item_id': item['id']})['status'] == 'done'
+        more = call(client, 'add_action_items', {'session_key': a['session_key'], 'items': ['One', 'Two'],
+                                                 'task_id': t['id']})['items']
+        many = call(client, 'resolve_action_item', {'session_key': a['session_key'],
+                                                    'item_ids': [i['id'] for i in more] + ['ai-nope']})
+        assert sorted(many['resolved']) == sorted(i['id'] for i in more) and list(many['failed']) == ['ai-nope']
+
+
+# ---- kept per task, so they cannot pile up ----------------------------------------
+
+def open_bodies(d, project='alpha'):
+    return sorted(i['body'] for i in d.snapshot(project)['action_items'] if i['status'] == 'open')
+
+
+def test_an_agent_must_name_the_task_its_items_come_from(desk):
+    d, a, b = desk
+    with pytest.raises(ValueError, match='per task'):
+        d.add_action_items(a['session_key'], ['Decide the price'])
+    # the human's own to-do lines from the dashboard need no task
+    assert d.human('alpha', 'action.add', {'body': 'Call the vendor'})['items'][0]['task_id'] is None
+
+
+def test_a_tasks_new_list_replaces_its_earlier_one(desk):
+    d, a, b = desk
+    t = fresh(d, d.claim(a['session_key'], 'Ship it', ['src/ship'], 'Build'))
+    other = d.claim(a['session_key'], 'Other', ['src/other'], 'Build')
+    d.update(a['session_key'], t['id'], t['version'], 'RUNNING', 'x', action_items=['Pick the group', 'Approve the price'])
+    d.add_action_items(a['session_key'], ['Keep: from another task'], other['id'])
+    d.add_action_items(a['session_key'], ['For agents: rerun the bench'], t['id'], 'agents')
+    d.human('alpha', 'action.add', {'body': 'My own note', 'task_id': t['id']})
+    t = fresh(d, t)
+    d.update(a['session_key'], t['id'], t['version'], 'RUNNING', 'x', action_items=['Approve the price', 'Say go'])
+    assert open_bodies(d) == ['Approve the price', 'For agents: rerun the bench', 'Keep: from another task',
+                              'My own note', 'Say go']
+    board = {i['body']: i for i in d.snapshot('alpha')['action_items']}
+    assert board['Pick the group']['status'] == 'superseded'
+    assert board['Pick the group']['resolution'] == 'Replaced by a newer list for this task'
+    assert board['Approve the price']['task_status'] == 'RUNNING'
+    journal = [e['entry'] for e in d.get_task_context(a['session_key'], t['id'])['journal'] if e['kind'] == 'action']
+    assert journal[-2:] == ['1 earlier action item(s) replaced by the new list', '1 action item(s) for Human: Say go']
+    t = fresh(d, t)   # omitted: the list stays as it is
+    d.update(a['session_key'], t['id'], t['version'], 'RUNNING', 'y')
+    assert 'Say go' in open_bodies(d)
+    t = fresh(d, t)   # an empty list clears the agents' items for the human; the human's own note stays
+    d.update(a['session_key'], t['id'], t['version'], 'DONE', 'x', 'shipped', 'tests green', action_items=[])
+    assert open_bodies(d) == ['For agents: rerun the bench', 'Keep: from another task', 'My own note']
+    assert {i['task_status'] for i in d.snapshot('alpha')['action_items'] if i['task_id'] == t['id']} == {'DONE'}
+
+
+def test_the_human_clears_many_at_once(desk):
+    d, a, b = desk
+    t = d.claim(a['session_key'], 'T', ['src/t'], 'x')
+    items = d.add_action_items(a['session_key'], ['One', 'Two', 'Three'], t['id'])['items']
+    result = d.human('alpha', 'action.clear', {'item_ids': [items[0]['id'], items[1]['id'], 'ai-missing']})
+    assert sorted(result['resolved']) == sorted([items[0]['id'], items[1]['id']])
+    assert list(result['failed']) == ['ai-missing'] and result['status'] == 'dropped'
+    assert open_bodies(d) == ['Three']
+    cleared = {i['body']: i for i in d.snapshot('alpha')['action_items']}['One']
+    assert cleared['status'] == 'dropped' and cleared['resolution'] == 'Cleared from the dashboard'
+    reopened = d.human('alpha', 'action.resolve', {'item_id': items[0]['id'], 'status': 'open'})
+    assert reopened['status'] == 'open'
+    with pytest.raises(ValueError):
+        d.human('alpha', 'action.clear', {'item_ids': []})
+    with pytest.raises(ValueError):
+        d.human('alpha', 'action.clear', {'item_ids': [items[2]['id']], 'status': 'maybe'})
+
+
+def test_an_agent_cannot_clear_what_is_not_its_own(desk, tmp_path):
+    d, a, b = desk
+    t = d.claim(a['session_key'], 'T', ['src/t'], 'x')
+    items = d.add_action_items(a['session_key'], ['One', 'Two'], t['id'])['items']
+    result = d.resolve_action_item(b['session_key'], item_ids=[i['id'] for i in items])
+    assert result['resolved'] == [] and len(result['failed']) == 2
+    assert open_bodies(d) == ['One', 'Two']

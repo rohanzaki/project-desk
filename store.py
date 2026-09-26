@@ -504,8 +504,8 @@ class Store(FeaturesMixin):
                       f'{status}: ' + (summary if status == 'DONE' else next_step))
             if evidence:
                 self._store_evidence(c, task_id, s['project'], s['id'], 'task', evidence)
-            if action_items:
-                self._add_action_items(c, s['project'], s['id'], action_items, task_id, 'human')
+            if action_items is not None:   # the task's whole list now; [] clears it
+                self._add_action_items(c, s['project'], s['id'], action_items, task_id, 'human', replace=True)
             if deployment == 'deployed' and commit_ref and (t['deployment'] != 'deployed' or t['commit_ref'] != commit_ref):
                 for service in [r for r in t['resources'] if r.startswith('service:')]:
                     self._record_deploy(c, s['project'], s['id'], service, commit_ref, summary or next_step, task_id)
@@ -1071,6 +1071,10 @@ class Store(FeaturesMixin):
             if action=='action.resolve':
                 return self._resolve_action_item(c,HUMAN,project,data.get('item_id',''),data.get('status','done'),
                                                  data.get('note',''))
+            if action=='action.clear':
+                return self._resolve_action_items(c,HUMAN,project,data.get('item_ids') or [],
+                                                  data.get('status') or 'dropped',
+                                                  data.get('note') or 'Cleared from the dashboard')
             if action=='approval.decide':
                 return self._decide_approval(c,project,data)
             if action=='lesson.create':

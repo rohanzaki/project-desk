@@ -51,7 +51,8 @@ Busy inbox? check_in(include=["inbox_digest"]) lists first lines, read_messages 
 acknowledge_inbox clears broadcasts. Use ask for questions that need an answer, request_approval
 for the human's decision, queue_for to wait for a service, wait_for to block until a reply.
 Whatever you leave for the human or others at the end of a task or turn (things to do, decide or
-check), save as action items: update_task(action_items=[...]) or add_action_items. Say so in chat too.
+check), save as action items on your task: update_task(action_items=[...]) is the task's whole list (it
+replaces the earlier one); add_action_items(task_id=...) adds to it. Say so in chat too.
 Check in before edits and at milestones.
 Claim literal relative file/directory paths before editing. Conflicts mean stop overlapping work.
 Before you plan around a file, would_conflict tells you who holds it without claiming it.
@@ -236,7 +237,9 @@ def create_app(db=None, roster=None, announce=None):
         evidence: optional checks [{command, exit_code, tests_passed, tests_failed, commit, output}]; the board
         shows a task as checked or failing from them. deployed + commit_ref on a task holding service:X claims
         records the deploy for prod_state. action_items: short lines left for the human (things they must do or
-        decide, follow-ups nobody owns yet); they land on the dashboard as checkboxes linked to this task."""
+        decide, follow-ups nobody owns yet); they land on the dashboard as checkboxes linked to this task.
+        It is the task's WHOLE current list: this task's earlier open items you leave out are marked superseded,
+        so repeat the ones still open. [] clears them; omit it to leave them as they are."""
         return store.update(session_key,task_id,version,status,next_step,summary,validation,commit_ref,deployment,
                             resources,evidence,action_items)
 
@@ -292,16 +295,19 @@ def create_app(db=None, roster=None, announce=None):
 
     @mcp.tool()
     def add_action_items(session_key:str,items:list[str],task_id:str|None=None,assignee:str='human')->dict:
-        """Save what is left as checkable items: the notes you end a task or a turn with ("left for you: ...").
-        assignee: 'human' (the owner's dashboard to-do list), 'agents' (any agent in your project), a session id,
-        or '<project>:human|agents' for another project. Link task_id when they come from a task."""
+        """Add checkable items to a task's list, keeping the ones already there: the notes you end a task or a turn
+        with ("left for you: ..."). task_id is required: items are kept per task. To restate a task's whole list,
+        use update_task(action_items=[...]) instead, which replaces it. assignee: 'human' (the owner's dashboard
+        to-do list), 'agents' (any agent in your project), a session id, or '<project>:human|agents'."""
         return store.add_action_items(session_key,items,task_id,assignee)
 
     @mcp.tool()
-    def resolve_action_item(session_key:str,item_id:str,status:str='done',note:str='')->dict:
+    def resolve_action_item(session_key:str,item_id:str|None=None,status:str='done',note:str='',
+                            item_ids:list[str]|None=None)->dict:
         """Tick an action item done (or 'dropped', or 'open' to reopen it): one assigned to you or to agents in
-        your project, or one you wrote. check_in(include=["action_items"]) lists yours."""
-        return store.resolve_action_item(session_key,item_id,status,note)
+        your project, or one you wrote. item_ids resolves many in one call and reports each one.
+        check_in(include=["action_items"]) lists yours."""
+        return store.resolve_action_item(session_key,item_id,status,note,item_ids)
 
     @mcp.tool()
     def remember(session_key:str,body:str,paths:list[str]|None=None,tags:list[str]|None=None,

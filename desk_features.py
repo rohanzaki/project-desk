@@ -829,8 +829,15 @@ class FeaturesMixin:
     # items with a checkbox, linked to the project, the task and the session that
     # wrote them. 'human' items are the owner's to-do list on the dashboard;
     # 'agents' items are for any agent in the project; a session id is for one.
+    #
+    # They are kept per task so they cannot pile up: an agent must name the task
+    # an item comes from, and update_task(action_items=[...]) is that task's whole
+    # current list, so the task's earlier open items it leaves out are marked
+    # 'superseded'. The human clears the rest in bulk from the dashboard.
 
     ACTION_ITEM_CHARS = 600
+    ACTION_CLEAR_MAX = 500
+    SUPERSEDED_NOTE = 'Replaced by a newer list for this task'
 
     def _action_target(self, c, project, assignee):
         """(project the item lives in, stored assignee) for 'human', 'agents', a session id or '<project>:human|agents'."""
@@ -852,16 +859,33 @@ class FeaturesMixin:
         self._open_project(c, row['project'])
         return row['project'], assignee
 
-    def _add_action_items(self, c, project, author, items, task_id=None, assignee='human'):
+    def _add_action_items(self, c, project, author, items, task_id=None, assignee='human', replace=False):
+        """Save items; with replace, they are the task's whole list for that assignee and the
+        task's other open items from agents are superseded (an empty list just clears them)."""
         if isinstance(items, str):
             items = [items]
-        if not isinstance(items, list) or not items or len(items) > 20:
+        if not isinstance(items, list) or (not items and not replace) or len(items) > 20:
             raise ValueError('Give 1–20 action items')
         bodies = [text(item, 'action item', self.ACTION_ITEM_CHARS) for item in items]
+        if author != HUMAN and not task_id:
+            raise ValueError('Action items are kept per task: pass the task_id they come from '
+                             '(claim a task first if you have none)')
         if task_id and self.task(c, task_id)['project'] != project:
             raise ValueError('Task belongs to another project')
         target, who = self._action_target(c, project, assignee)
         stamp, made = now(), []
+        if replace and task_id:
+            keep = set(bodies)
+            gone = [r['id'] for r in c.execute(
+                "SELECT id, body FROM action_items WHERE task_id=? AND project=? AND assignee=? AND status='open' "
+                'AND author!=?', (task_id, target, who, HUMAN)) if r['body'] not in keep]
+            if gone:
+                c.executemany("UPDATE action_items SET status='superseded',resolved=?,resolved_by=?,resolution=? "
+                              'WHERE id=?', [(stamp, author, self.SUPERSEDED_NOTE, item_id) for item_id in gone])
+                self.event(c, target, author, 'action.superseded', {'items': gone, 'task_id': task_id})
+                if target == project:
+                    self._log(c, task_id, project, author, 'action',
+                              f'{len(gone)} earlier action item(s) replaced by the new list')
         for body in bodies:
             if c.execute("SELECT 1 FROM action_items WHERE project=? AND body=? AND status='open' AND "
                          "IFNULL(task_id,'')=IFNULL(?,'')", (target, body, task_id)).fetchone():
@@ -869,8 +893,9 @@ class FeaturesMixin:
             item_id = ident('ai-')
             c.execute('''INSERT INTO action_items(id,project,origin_project,task_id,author,assignee,body,created)
                          VALUES(?,?,?,?,?,?,?,?)''', (item_id, target, project, task_id, author, who, body, stamp))
-            made.append(item_id)
+            made.append((item_id, body))
         if made:
+            made, bodies = [item_id for item_id, _ in made], [body for _, body in made]
             self.event(c, target, author, 'action.added', {'items': made, 'task_id': task_id, 'assignee': who,
                                                            'from_project': project})
             if task_id and target == project:
@@ -898,8 +923,9 @@ class FeaturesMixin:
         if row['resolved_by']:
             item['resolved_by_name'] = lookup.get(row['resolved_by'], row['resolved_by'])
         if row['task_id']:
-            task = c.execute('SELECT title FROM tasks WHERE id=?', (row['task_id'],)).fetchone()
+            task = c.execute('SELECT title, status FROM tasks WHERE id=?', (row['task_id'],)).fetchone()
             item['task_title'] = task['title'] if task else ''
+            item['task_status'] = task['status'] if task else ''
         return item
 
     def _resolve_action_item(self, c, actor, actor_project, item_id, status, note, ids=()):
@@ -928,10 +954,29 @@ class FeaturesMixin:
                       f"Action item {status}: {item['body'][:160]}" + (f' — {note}' if note else ''))
         return self._action_row(c, item_id)
 
-    def resolve_action_item(self, key, item_id, status='done', note=''):
+    def resolve_action_item(self, key, item_id=None, status='done', note='', item_ids=None):
         with self.connection(True) as c:
             s = self.auth(c, key)
-            return self._resolve_action_item(c, s['id'], s['project'], item_id, status, note, self._aliases(c, s['id']))
+            ids = self._aliases(c, s['id'])
+            if item_ids is None:
+                return self._resolve_action_item(c, s['id'], s['project'], item_id, status, note, ids)
+            return self._resolve_action_items(c, s['id'], s['project'], item_ids, status, note, ids)
+
+    def _resolve_action_items(self, c, actor, actor_project, item_ids, status, note, ids=()):
+        """Resolve many at once. One id that is not yours fails alone, not the batch."""
+        if isinstance(item_ids, str):
+            item_ids = [item_ids]
+        if not isinstance(item_ids, list) or not item_ids or len(item_ids) > self.ACTION_CLEAR_MAX:
+            raise ValueError(f'Give 1–{self.ACTION_CLEAR_MAX} action item ids')
+        if status not in ('done', 'dropped', 'open'):
+            raise ValueError("status is 'done', 'dropped', or 'open' to reopen it")
+        resolved, failed = [], {}
+        for item_id in dict.fromkeys(str(i) for i in item_ids):
+            try:
+                resolved.append(self._resolve_action_item(c, actor, actor_project, item_id, status, note, ids)['id'])
+            except (ValueError, PermissionError) as e:
+                failed[item_id] = str(e)
+        return {'status': status, 'resolved': resolved, 'failed': failed}
 
     def _action_items_for(self, c, s, ids):
         marks = ','.join('?' * len(ids))
@@ -950,11 +995,11 @@ class FeaturesMixin:
                          (project, project, _ago(hours=72), limit)).fetchall()
         names = self._names(c, [r['author'] for r in rows] + [r['assignee'] for r in rows]
                             + [r['resolved_by'] for r in rows if r['resolved_by']])
-        titles = {}
+        tasks = {}
         task_ids = sorted({r['task_id'] for r in rows if r['task_id']})
         if task_ids:
-            titles = {r['id']: r['title'] for r in c.execute(
-                f"SELECT id,title FROM tasks WHERE id IN ({','.join('?' * len(task_ids))})", task_ids)}
+            tasks = {r['id']: r for r in c.execute(
+                f"SELECT id,title,status FROM tasks WHERE id IN ({','.join('?' * len(task_ids))})", task_ids)}
         out = []
         for r in rows:
             item = dict(r)
@@ -963,7 +1008,9 @@ class FeaturesMixin:
             if r['resolved_by']:
                 item['resolved_by_name'] = names.get(r['resolved_by'], r['resolved_by'])
             if r['task_id']:
-                item['task_title'] = titles.get(r['task_id'], '')
+                task = tasks.get(r['task_id'])
+                item['task_title'] = task['title'] if task else ''
+                item['task_status'] = task['status'] if task else ''
             out.append(item)
         return out
 

@@ -200,26 +200,59 @@ function journalHtml(task){
   if(!entries.length)return '';
   return `<div class="journal"><span class="detail-label">Recent log</span>${entries.map(entry=>`<div class="journal-entry"><span>${esc(entry.kind)}</span> ${esc(entry.entry.slice(0,220))} <time>${time(entry.created)}</time></div>`).join('')}</div>`;
 }
+const RESOLVED_LABEL={done:'done',dropped:'cleared',superseded:'replaced'};
+const actionGroupState=new Map();
 function actionItemHtml(item,withTask=true){
   const done=item.status!=='open';
   const who=item.assignee==='rohan'?'you':item.assignee_name;
   const origin=item.origin_project&&item.origin_project!==project()?` · from ${esc(item.origin_project)}`:(item.project!==project()?` · for ${esc(item.project)}`:'');
-  return `<label class="action-item${done?' action-done':''}"><input type="checkbox" data-action-item="${esc(item.id)}"${done?' checked':''}><span><span class="action-body">${esc(item.body)}</span><span class="meta">for ${esc(who)} · ${esc(item.author_name)} · ${time(item.created)}${withTask&&item.task_title?` · ${esc(item.task_title.slice(0,60))}`:''}${origin}${done&&item.resolved_by_name?` · ${esc(item.status)} by ${esc(item.resolved_by_name)}`:''}${item.resolution?` — ${esc(item.resolution)}`:''}</span></span></label>`;
+  return `<label class="action-item${done?' action-done':''}"><input type="checkbox" data-action-item="${esc(item.id)}"${done?' checked':''}><span><span class="action-body">${esc(item.body)}</span><span class="meta">for ${esc(who)} · ${esc(item.author_name)} · ${time(item.created)}${withTask&&item.task_title?` · ${esc(item.task_title.slice(0,60))}`:''}${origin}${done&&item.resolved_by_name?` · ${esc(RESOLVED_LABEL[item.status]||item.status)} by ${esc(item.resolved_by_name)}`:''}${item.resolution?` — ${esc(item.resolution)}`:''}</span></span></label>`;
+}
+function shownActionItems(){
+  const filter=$('#action-filter').value,all=board.action_items||[];
+  return all.filter(item=>filter==='done'?item.status!=='open':item.status==='open'&&(filter==='all'||(filter==='human'?item.assignee==='rohan':item.assignee!=='rohan')));
+}
+// One group per task, so what is left reads as each task's own list. Live tasks
+// first, then finished ones (folded, easy to clear), then items with no task.
+function actionGroups(items){
+  const groups=new Map();
+  for(const item of items){
+    const key=item.task_id||'';
+    if(!groups.has(key))groups.set(key,{key,title:item.task_id?(item.task_title||item.task_id):'Not linked to a task',status:item.task_id?(item.task_status||''):'',items:[]});
+    groups.get(key).items.push(item);
+  }
+  const rank=group=>!group.key?2:group.status==='DONE'?1:0;
+  const latest=group=>Math.max(...group.items.map(item=>Date.parse(item.created)));
+  return [...groups.values()].sort((a,b)=>rank(a)-rank(b)||latest(b)-latest(a));
+}
+function actionGroupHtml(group,canClear){
+  const open=actionGroupState.has(group.key)?actionGroupState.get(group.key):group.status!=='DONE';
+  const count=`${group.items.length} item${group.items.length===1?'':'s'}`;
+  return `<details class="action-group" data-action-group="${esc(group.key)}"${open?' open':''}><summary>${group.status?`<span class="badge ${esc(group.status.toLowerCase())}">${esc(group.status)}</span>`:''}<span class="action-group-title">${esc(group.title)}</span><span class="meta">${count}</span>${canClear?`<button type="button" data-clear-items="${esc(group.items.map(item=>item.id).join(','))}" data-clear-label="${esc(group.title.slice(0,80))}" title="Clear this task's action points">Clear</button>`:''}</summary>${group.items.map(item=>actionItemHtml(item,false)).join('')}</details>`;
 }
 function renderActionItems(){
   const box=$('#action-items');
   if(onOverview()){box.hidden=true;return;}
   box.hidden=false;
-  const filter=$('#action-filter').value,all=board.action_items||[];
-  const shown=all.filter(item=>filter==='done'?item.status!=='open':item.status==='open'&&(filter==='all'||(filter==='human'?item.assignee==='rohan':item.assignee!=='rohan')));
+  const all=board.action_items||[],shown=shownActionItems(),resolvedView=$('#action-filter').value==='done';
   const openForYou=all.filter(item=>item.status==='open'&&item.assignee==='rohan').length;
   $('#action-filter').options[0].textContent=`For you${openForYou?` (${openForYou})`:''}`;
-  $('#action-list').innerHTML=shown.length?shown.map(item=>actionItemHtml(item)).join(''):'<p class="empty">Nothing here. Agents add what they leave for you when they finish.</p>';
+  $('#clear-actions').hidden=resolvedView||!shown.length;
+  $('#action-list').innerHTML=shown.length?actionGroups(shown).map(group=>actionGroupHtml(group,!resolvedView)).join(''):'<p class="empty">Nothing here. Agents add what they leave for you when they finish.</p>';
 }
 function taskActionsHtml(task){
-  const items=(board.action_items||[]).filter(item=>item.task_id===task.id);
+  const items=(board.action_items||[]).filter(item=>item.task_id===task.id&&['open','done'].includes(item.status));
   if(!items.length)return '';
-  return `<div class="task-actions-list"><span class="detail-label">Action points</span>${items.map(item=>actionItemHtml(item,false)).join('')}</div>`;
+  const open=items.filter(item=>item.status==='open');
+  const clear=open.length?`<button type="button" data-clear-items="${esc(open.map(item=>item.id).join(','))}" data-clear-label="${esc(task.title.slice(0,80))}">Clear all</button>`:'';
+  return `<div class="task-actions-list"><span class="detail-label">Action points ${clear}</span>${items.map(item=>actionItemHtml(item,false)).join('')}</div>`;
+}
+async function clearActionItems(ids,label){
+  if(!ids.length)return;
+  const result=await mutate('action.clear',{item_ids:ids});
+  const failed=Object.keys(result.failed||{}).length;
+  $('#notice').textContent=`Cleared ${result.resolved.length} action point${result.resolved.length===1?'':'s'}${label?` from ${label}`:''}. They are under "Recently done"; untick one to bring it back.${failed?` ${failed} could not be cleared.`:''}`;
+  await refresh();
 }
 function renderApprovals(){
   const box=$('#approvals');
@@ -604,6 +637,32 @@ document.addEventListener('change',event=>{
   mutate('action.resolve',{item_id:box.dataset.actionItem,status:box.checked?'done':'open'}).then(refresh).catch(error=>{$('#notice').textContent=error.message;box.checked=!box.checked;});
 });
 $('#action-filter').addEventListener('change',renderActionItems);
+$('#action-list').addEventListener('toggle',event=>{
+  const group=event.target.closest?.('[data-action-group]');
+  if(group)actionGroupState.set(group.dataset.actionGroup,group.open);
+},true);
+document.addEventListener('click',event=>{
+  const button=event.target.closest('[data-clear-items]');
+  if(!button)return;
+  event.preventDefault();
+  button.disabled=true;
+  clearActionItems(button.dataset.clearItems.split(',').filter(Boolean),button.dataset.clearLabel)
+    .catch(error=>{$('#notice').textContent=error.message;button.disabled=false;});
+});
+$('#clear-actions').addEventListener('click',()=>{
+  const shown=shownActionItems(),dayAgo=days=>Date.now()-days*864e5;
+  const choices=[
+    ['finished','On finished (DONE) tasks',shown.filter(item=>item.task_status==='DONE')],
+    ['old','Older than 3 days',shown.filter(item=>Date.parse(item.created)<dayAgo(3))],
+    ['unlinked','Not linked to a task',shown.filter(item=>!item.task_id)],
+    ['shown','Everything in this list',shown]];
+  const options=choices.map(([value,label,items])=>({value,label:`${label} (${items.length})`,disabled:!items.length}));
+  const first=options.find(option=>!option.disabled)?.value||'shown';
+  openEditor('Clear action points',
+    '<p class="dialog-hint">Cleared points move to "Recently done" for 3 days; untick one there to bring it back.</p>'+
+    field('Which','which','select',first,options),
+    data=>{const pick=choices.find(([value])=>value===data.which);return clearActionItems((pick?pick[2]:[]).map(item=>item.id),'');},'Clear');
+});
 $('#announce-restart').addEventListener('click',()=>openEditor('Announce a Project Desk restart',
   '<p class="dialog-hint">Posts the notice to every active project\'s board. The desk posts "Project Desk is back" by itself after it starts. VS Code sessions that are not connected to the desk do not see this.</p>'+
   field('Starts in (seconds)','seconds','text','60')+field('Reason (optional)','reason','text','',[],false),

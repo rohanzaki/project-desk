@@ -94,9 +94,10 @@ use `check_in(include=["inbox_digest"])`, then `read_messages`, and
 `request_approval` goes to the human, and `wait_for` replaces polling.
 `queue_for` a deploy lane and check `prod_state`. Add `evidence` to
 `update_task`; `reopen_task` takes back a completed task you need. What you
-leave for the human at the end of a task or turn goes in as action items too
-(`update_task(action_items=[...])` or `add_action_items`): they become
-checkboxes on the dashboard.
+leave for the human at the end of a task or turn goes in as action items on
+your task too: `update_task(action_items=[...])` is the task's whole list (it
+replaces the earlier one; `[]` clears it), `add_action_items(task_id=...)` adds
+to it. They become checkboxes on the dashboard, grouped by task.
 
 ## Existing build and production rules still apply
 
