@@ -100,11 +100,11 @@ def test_forget_archives(desk):
 def test_the_journal_records_the_life_of_a_task(desk):
     d, a, b, _ = desk
     t = d.claim(a['session_key'], 'Tender API', ['src/api'], 'Build the endpoint')
-    d.log_progress(a['session_key'], t['id'], 'Found: the Bidder feed sends Urdu dates; normalising in parse.ts')
+    d.log_progress(a['session_key'], t['id'], 'Found: the partner feed sends local-format dates; normalising in parse.ts')
     with pytest.raises(PermissionError):
         d.log_progress(b['session_key'], t['id'], 'not mine')
     t = fresh(d, t)
-    d.update(a['session_key'], t['id'], t['version'], 'BLOCKED', 'Waiting on the Bidder schema')
+    d.update(a['session_key'], t['id'], t['version'], 'BLOCKED', 'Waiting on the partner schema')
     journal = d.get_task_context(b['session_key'], t['id'])['journal']
     assert [e['kind'] for e in journal] == ['claimed', 'progress', 'blocked']
     assert 'Urdu dates' in journal[1]['entry'] and journal[1]['author_name'] == 'alpha api agent'
@@ -236,8 +236,8 @@ def test_a_question_stays_open_until_answered(desk):
 def test_approval_round_trip(desk, tmp_path):
     d, a, b, _ = desk
     t = d.claim(a['session_key'], 'Tender API', ['src/api'], 'Build')
-    approval = d.request_approval(a['session_key'], 'Which auth for the Bidder API?',
-                                  ['HMAC shared secret', 'mTLS'], 'Bidder calls CMU server-to-server.', t['id'])
+    approval = d.request_approval(a['session_key'], 'Which auth for the partner API?',
+                                  ['HMAC shared secret', 'mTLS'], 'The partner calls us server-to-server.', t['id'])
     assert approval['status'] == 'pending' and approval['options'] == ['HMAC shared secret', 'mTLS']
     board = d.snapshot('alpha')
     assert board['approvals'][0]['id'] == approval['id']
@@ -425,7 +425,7 @@ def test_an_agent_reopens_a_finished_task_it_needs(desk, tmp_path):
     t = d.claim(a['session_key'], 'Tender API', ['src/api'], 'Build')
     t = fresh(d, t)
     d.update(a['session_key'], t['id'], t['version'], 'DONE', 'x', 'API shipped', 'curl 200')
-    reopened = d.reopen_task(b['session_key'], t['id'], 'Bidder needs a closes_at field', 'Add closes_at')
+    reopened = d.reopen_task(b['session_key'], t['id'], 'The partner needs a closes_at field', 'Add closes_at')
     assert reopened['owner'] == b['session_id'] and reopened['status'] == 'RUNNING'
     assert reopened['lessons'][0]['body'].startswith('The tender API')
     assert d.would_conflict(a['session_key'], ['src/api'])['clear'] is False
@@ -471,10 +471,10 @@ def test_dashboard_actions_for_lessons_and_approvals(tmp_path, monkeypatch):
     headers = {'X-Project-Desk': 'dashboard'}
     with TestClient(app) as client:
         made = client.post('/api/action', headers=headers, json={'project': 'alpha', 'action': 'lesson.create', 'data': {
-            'body': 'Rohan: never deploy on Friday night.', 'paths': 'src/app\nsrc/lib', 'tags': 'deploy, rules'}})
+            'body': 'Owner: never deploy on Friday night.', 'paths': 'src/app\nsrc/lib', 'tags': 'deploy, rules'}})
         assert made.status_code == 200 and made.json()['paths'] == ['src/app', 'src/lib'] and made.json()['author'] == 'rohan'
         state = client.get('/api/state?project=alpha').json()
-        assert state['lessons'][0]['body'].startswith('Rohan: never deploy')
+        assert state['lessons'][0]['body'].startswith('Owner: never deploy')
         archived = client.post('/api/action', headers=headers, json={'project': 'alpha', 'action': 'lesson.archive',
                                'data': {'lesson_id': made.json()['id'], 'reason': 'test'}})
         assert archived.status_code == 200

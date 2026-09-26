@@ -452,13 +452,13 @@ def test_human_crosses_a_task_over_from_the_dashboard(tmp_path, monkeypatch):
     headers = {'X-Project-Desk': 'dashboard'}
     with TestClient(app) as client:
         made = client.post('/api/action', headers=headers, json={'project': 'alpha', 'action': 'crossover.start',
-                           'data': {'task_id': ta['id'], 'invite': ['beta'], 'note': 'Rohan: build the client'}})
+                           'data': {'task_id': ta['id'], 'invite': ['beta'], 'note': 'Owner: build the client'}})
         assert made.status_code == 200, made.text
         view = made.json()
         assert view['paste_line'] and view['awaiting_join'] == ['beta']
         invite = store.check_in(b['session_key'], include=['inbox'])['inbox']
         assert invite[0]['from_project'] == 'alpha' and invite[0]['from_name'] == 'Human'
-        assert 'Rohan: build the client' in invite[0]['body']
+        assert 'Owner: build the client' in invite[0]['body']
         # the task's owner is still the agent; the human only opened the door
         assert store.get_task_context(a['session_key'], ta['id'])['task']['owner'] == a['session_id']
         bad = client.post('/api/action', headers=headers, json={'project': 'alpha', 'action': 'crossover.start',
