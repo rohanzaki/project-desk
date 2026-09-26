@@ -809,7 +809,7 @@ class FeaturesMixin:
                 more = f'\n…and {len(rows) - 30} more on the dashboard.' if len(rows) > 30 else ''
                 self._message(c, project, SYSTEM, HUMAN,
                               f'STALE CLAIMS: {len(rows)} task(s) hold paths but their owner has not checked in for '
-                              f'{hours}+ h. Reassign or close them on the dashboard, or let the owner resume.\n'
+                              f'{hours:g}+ h. Reassign or close them on the dashboard, or let the owner resume.\n'
                               + '\n'.join(lines) + more, None, kind='stale')
                 c.executemany('INSERT OR IGNORE INTO stale_alerts VALUES(?,?,?,?)',
                               [(r['task_id'], r['owner'], r['owner_last_seen'], stamp) for r in rows])
