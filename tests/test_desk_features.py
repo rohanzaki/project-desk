@@ -135,6 +135,7 @@ def test_resume_takes_back_an_earlier_sessions_work(desk):
     with d.connection() as c:
         assert c.execute("SELECT COUNT(*) FROM messages WHERE recipient=? AND body LIKE 'RESUMED:%'",
                          (a['session_id'],)).fetchone()[0] == 1
+    assert any(m['recipient'] == 'rohan' and m['body'].startswith('RESUMED:') for m in d.snapshot('alpha')['messages'])
     with pytest.raises(Conflict, match='already resumed'):
         d.resume_session(again['session_key'], a['session_id'])
     t = fresh(d, t)
@@ -154,6 +155,10 @@ def test_resume_rules(desk, tmp_path):
     elsewhere = d.register('same kind, other worktree', 'claude', '', 'main', declared(tmp_path, 'alpha2'))
     with pytest.raises((PermissionError, ValueError)):
         d.resume_session(elsewhere['session_key'], a['session_id'])
+    other_branch = d.register('same worktree, other branch', 'claude', '', 'feat/other', repo)
+    assert 'resumable' not in other_branch
+    with pytest.raises(PermissionError, match='branch'):
+        d.resume_session(other_branch['session_key'], a['session_id'])
 
 
 # ---------- 4. inbox triage ----------

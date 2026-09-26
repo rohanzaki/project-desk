@@ -371,13 +371,17 @@ class Store(FeaturesMixin):
                       (sid, hashlib.sha256(key.encode()).hexdigest(), text(name,'name',120), kind,
                        project, text(branch,'branch',250), text(worktree,'worktree',1000), now()))
             self.event(c, project, sid, 'session.registered', {'name': name, 'kind': kind})
-            resumable = self._resumable(c, {'id': sid, 'project': project, 'kind': kind, 'worktree': worktree})
+            resumable = self._resumable(c, {'id': sid, 'project': project, 'kind': kind, 'worktree': worktree,
+                                            'branch': branch})
         result = {'session_id': sid, 'session_key': key, 'project': project,
                   'instruction': 'Keep the key private for this session; use check_in before edits and at milestones.'}
         if resumable:
             result['resumable'] = resumable
-            result['resume_hint'] = ('Earlier sessions of this agent in this worktree still own open tasks. If one '
-                                     'was you before a restart, call resume_session(session_key, from_session).')
+            result['resume_hint'] = ('Earlier sessions of this agent kind in this worktree and branch still own open '
+                                     'tasks. Only if one was YOU before a restart or lost context (its name and tasks '
+                                     'match your own work), call resume_session(session_key, from_session). Several '
+                                     'sessions can share a checkout: never resume one you do not recognise; the '
+                                     'human is told of every resume.')
         if hint:
             result['hint'] = hint
         return result

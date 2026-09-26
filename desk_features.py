@@ -305,10 +305,11 @@ class FeaturesMixin:
     def _resumable(self, c, s):
         out = []
         for row in c.execute('''SELECT id,name,branch,last_seen FROM sessions WHERE project=? AND kind=?
-                                AND worktree=? AND imported=0 AND id!=? AND last_seen<?
+                                AND worktree=? AND branch=? AND imported=0 AND id!=? AND last_seen<?
                                 AND id NOT IN (SELECT old_session FROM session_links)
                                 ORDER BY last_seen DESC LIMIT 20''',
-                             (s['project'], s['kind'], s['worktree'], s['id'], _ago(minutes=RESUME_AFTER_MINUTES))):
+                             (s['project'], s['kind'], s['worktree'], s['branch'], s['id'],
+                              _ago(minutes=RESUME_AFTER_MINUTES))):
             tasks = [{'id': t['id'], 'title': t['title'], 'status': t['status']} for t in c.execute(
                 "SELECT id,title,status FROM tasks WHERE owner=? AND status!='DONE' ORDER BY updated DESC", (row['id'],))]
             if tasks:
@@ -323,8 +324,9 @@ class FeaturesMixin:
             old = c.execute('SELECT * FROM sessions WHERE id=?', (from_session,)).fetchone()
             if not old or old['imported'] or old['id'] == s['id']:
                 raise ValueError('Name an earlier session of yours (see register_session → resumable)')
-            if (old['project'], old['kind'], old['worktree']) != (s['project'], s['kind'], s['worktree']):
-                raise PermissionError('Resume only an earlier session from your own project, agent kind and worktree')
+            if (old['project'], old['kind'], old['worktree'], old['branch']) != \
+                    (s['project'], s['kind'], s['worktree'], s['branch']):
+                raise PermissionError('Resume only an earlier session from your own project, agent kind, worktree and branch')
             if old['last_seen'] >= _ago(minutes=RESUME_AFTER_MINUTES):
                 raise Conflict(f'{from_session} checked in less than {RESUME_AFTER_MINUTES} min ago and may still be '
                                'running; ask it for a handoff instead')
@@ -351,6 +353,11 @@ class FeaturesMixin:
                           f"{', '.join(tasks) or '(none)'} after {RESUME_AFTER_MINUTES}+ min of silence"
                           + (f': {reason}' if reason else '') +
                           '. If you are still running, check in and ask it for a handoff.', None, kind='fyi')
+            # Many sessions can share one checkout, so the human sees every resume and can Reassign it back.
+            self._message(c, s['project'], s['id'], HUMAN,
+                          f"RESUMED: {s['name']} ({s['id']}) took over {old['name']} ({from_session})'s open tasks "
+                          f"{', '.join(tasks) or '(none)'}" + (f': {reason}' if reason else '') +
+                          '. Reassign on the dashboard if that was not its own earlier session.', None, kind='fyi')
             return {'resumed_from': from_session, 'resumed_name': old['name'],
                     'tasks': [{**self.task(c, task_id), 'journal': self._journal(c, task_id, 10)} for task_id in tasks],
                     'inbox': 'Messages addressed to the earlier session now reach your inbox too.'}
