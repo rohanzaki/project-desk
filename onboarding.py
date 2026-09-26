@@ -54,7 +54,9 @@ def claude_block(project, desk):
             "Before editing, read the Project Desk section of `AGENTS.md` and follow it. "
             "Register with `register_session` and omit `project`; the desk reads it from "
             "`.project-desk.json`. Work only in this project; for work shared with another "
-            "project on this desk, use a crossover (see `AGENTS.md`).\n\n"
+            "project on this desk, use a crossover (see `AGENTS.md`). Read the `lessons` that "
+            "`claim_task` returns and `remember` new traps; after a restart, `resume_session` "
+            "only your own earlier session.\n\n"
             f"Dashboard: {v['dashboard_url']}\n{END}\n")
 
 

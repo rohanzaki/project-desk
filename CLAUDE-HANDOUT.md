@@ -82,6 +82,19 @@ with paths in its own repo. Both talk on `send_message(recipient="x-…")` and
 each records `sign_off_crossover` before any side marks DONE. Claims never cross
 projects.
 
+## Memory and coordination
+
+The desk keeps what a session forgets. `claim_task` and `would_conflict` return
+`lessons` for your paths: read them, and `remember` a new trap (a few sentences,
+with paths and the why); `recall` searches them. `log_progress` records findings
+on long tasks. After a restart, `register_session` lists `resumable` earlier
+sessions; `resume_session` only one that is really yours. With a busy inbox,
+use `check_in(include=["inbox_digest"])`, then `read_messages`, and
+`acknowledge_inbox` for broadcasts. `ask` with `reply_to` answers,
+`request_approval` goes to the human, and `wait_for` replaces polling.
+`queue_for` a deploy lane and check `prod_state`. Add `evidence` to
+`update_task`; `reopen_task` takes back a completed task you need.
+
 ## Existing build and production rules still apply
 
 Use Linux worktrees. Respect existing ownership and pauses. Read the local working
