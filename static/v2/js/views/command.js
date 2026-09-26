@@ -114,6 +114,7 @@ export function NeedsYou() {
 export function SinceStrip() {
   const ctx = useContext(Desk);
   const [open, setOpen] = useState(false);
+  const [all, setAll] = useState(false);
   const d = ctx.digest;
   if (!d || !ctx.lookedSince) return null;
   const parts = [['done', 'finished'], ['deploys', 'deployed'], ['claimed', 'started'], ['questions', 'questions'], ['approvals', 'approvals'], ['decisions', 'decisions']]
@@ -134,8 +135,8 @@ export function SinceStrip() {
       <button type="button" class="link-btn" onClick=${() => setOpen(!open)}>${open ? 'Hide' : 'Show what'}</button>
       <button type="button" class="link-btn" onClick=${() => ctx.markLooked()}>Mark seen</button>
     </div>
-    ${open ? html`<div class="since-list">${rows.slice(0, 40).map(([k, t, who, at, tid]) => html`
-      <div class="li"><span class="k">${k}</span><span>${tid ? html`<button type="button" class="link-btn" onClick=${() => ctx.openTask(tid)}>${t}</button>` : t}${who ? html` <span class="muted">· ${who}</span>` : ''}</span><span class="mono muted2">${when(at)}</span></div>`)}</div>` : ''}
+    ${open ? html`<div class="since-list">${rows.slice(0, all ? 60 : 12).map(([k, t, who, at, tid]) => html`
+      <div class="li"><span class="k">${k}</span><span>${tid ? html`<button type="button" class="link-btn" onClick=${() => ctx.openTask(tid)}>${t}</button>` : t}${who ? html` <span class="muted">· ${who}</span>` : ''}</span><span class="mono muted2">${when(at)}</span></div>`)}${rows.length > 12 && !all ? html`<div class="more"><button type="button" class="link-btn" onClick=${() => setAll(true)}>Show all ${rows.length}</button></div>` : ''}</div>` : ''}
   </div>`;
 }
 

@@ -154,6 +154,9 @@ select.input{max-width:220px;padding-right:6px}
 .since-list{display:flex;flex-direction:column;gap:3px;padding:8px 14px 10px;border:1px solid var(--blue-line);border-top:0;border-radius:0 0 10px 10px;background:#f8faff;font-size:12px;margin-top:-10px}
 .since-list .li{display:grid;grid-template-columns:70px minmax(0,1fr) auto;gap:8px;align-items:baseline}
 .since-list .k{font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--blue-fg)}
+.since-list .li>span:nth-child(2){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.since-list .li .link-btn{text-align:left;font-size:12px;font-weight:600}
+.since-list .more{padding-top:4px}
 
 /* ---- needs you ---- */
 .att-row{display:grid;grid-template-columns:118px minmax(0,1fr) auto;gap:10px 14px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line3);background:var(--paper);cursor:pointer}

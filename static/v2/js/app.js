@@ -107,11 +107,13 @@ function App() {
     loadProjects();
     const tick = (fn, ms) => setInterval(() => { if (!document.hidden) fn(); }, ms);
     const a = tick(() => loadBoard(), BOARD_MS), b = tick(loadAttention, ATTENTION_MS), c = tick(loadProjects, PROJECTS_MS);
+    const onHash = () => { const v = initialView(); if (v !== latest.current.view) { setView(v); setPalette(false); } };
+    window.addEventListener('hashchange', onHash);
     const onResize = () => setWidth(window.innerWidth);
     const onVis = () => { if (document.hidden) store.set(lookedKey(latest.current.project), new Date().toISOString()); else refresh(); };
     window.addEventListener('resize', onResize); document.addEventListener('visibilitychange', onVis);
     window.addEventListener('pagehide', () => store.set(lookedKey(latest.current.project), new Date().toISOString()));
-    return () => { clearInterval(a); clearInterval(b); clearInterval(c); window.removeEventListener('resize', onResize); document.removeEventListener('visibilitychange', onVis); };
+    return () => { clearInterval(a); clearInterval(b); clearInterval(c); window.removeEventListener('resize', onResize); window.removeEventListener('hashchange', onHash); document.removeEventListener('visibilitychange', onVis); };
   }, []);
 
   // "Since you last looked": the moment this browser last left the page.
@@ -125,7 +127,7 @@ function App() {
 
   // Select the first task once a board arrives; keep the URL hash on the view.
   useEffect(() => { if (board && (!sel || !taskOf(board, sel))) { const first = (board.tasks || []).find(t => t.status !== 'DONE') || (board.tasks || [])[0]; if (first) setSel(first.id); } }, [boardVersion]);
-  useEffect(() => { if (location.hash.replace('#', '') !== view) history.replaceState(null, '', `${location.pathname}${location.search}#${view}`); }, [view]);
+  useEffect(() => { if (location.hash.replace(/^#\/?/, '') !== view) history.pushState(null, '', `${location.pathname}${location.search}#${view}`); }, [view]);
   useEffect(() => { const n = att.items.length; document.title = n ? `(${n}) Project Desk` : 'Project Desk'; }, [att]);
 
   // Browser notifications for new "Needs you" items (opt-in).
