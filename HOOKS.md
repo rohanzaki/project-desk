@@ -40,6 +40,12 @@ receiving that context does not grant ownership or demand a reply. Avoid
 notification echo loops: publish meaningful work updates, not another broadcast
 just to announce that an alert arrived.
 
+A message sent from another project (a crossover, or a direct cross-project
+`send_message`) reaches your inbox like any other. Its hook line names the origin,
+`UNACKNOWLEDGED MESSAGE m-… from s-… (project bidder, <session name>)`, and a
+crossover thread shows `task=crossover x-…`. Reply to the sender's session ID;
+acknowledge it as usual.
+
 ## What the hooks do
 
 `codex_hooks.py` supports both clients. It reads Project Desk at `SessionStart`,

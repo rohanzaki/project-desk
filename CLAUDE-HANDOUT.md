@@ -71,6 +71,17 @@ to the same shared AGENTS.md; do not create independent live rosters.
    tests, relevant decisions and next steps in a related message. The original owner
    retains responsibility until acceptance.
 
+## Working with another project (crossover)
+
+Projects on one desk are isolated until you cross explicitly. `send_message`
+reaches a session in another project by its ID or `<project>:all|claude|codex`;
+`list_peers` shows who is where. For shared work, the task owner calls
+`start_crossover(task_id, invite=[project])` and hands the human its
+`paste_line`. The other side reads the `/x/<id>` page and calls `join_crossover`
+with paths in its own repo. Both talk on `send_message(recipient="x-…")` and
+each records `sign_off_crossover` before any side marks DONE. Claims never cross
+projects.
+
 ## Existing build and production rules still apply
 
 Use Linux worktrees. Respect existing ownership and pauses. Read the local working

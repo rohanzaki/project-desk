@@ -53,7 +53,8 @@ def claude_block(project, desk):
             f"This repo coordinates through Project Desk as project `{v['project']}` ({v['name']}). "
             "Before editing, read the Project Desk section of `AGENTS.md` and follow it. "
             "Register with `register_session` and omit `project`; the desk reads it from "
-            "`.project-desk.json`. Work only in this project.\n\n"
+            "`.project-desk.json`. Work only in this project; for work shared with another "
+            "project on this desk, use a crossover (see `AGENTS.md`).\n\n"
             f"Dashboard: {v['dashboard_url']}\n{END}\n")
 
 
