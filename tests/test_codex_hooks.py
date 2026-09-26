@@ -180,9 +180,10 @@ def test_identity_mismatch_never_advances_cursor(desk):
         response = call(tool, args)
         response['session_id'] = 'another-session'
         return response
+    start = hooks.private_read(path)['cursor']
     result = hooks.run_hook(payload(), root, wrong_identity)
     assert 'unavailable' in json.dumps(result)
-    assert hooks.private_read(path)['cursor'] == 0
+    assert hooks.private_read(path)['cursor'] == start
 
 
 def test_own_status_updates_do_not_generate_stop_loops(desk):

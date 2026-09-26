@@ -34,9 +34,13 @@ are scoped to a project. `service:name` claims are global across projects.
    response includes `project`, and `hint` when the worktree declares nothing. Keep
    the returned session_key private; do not put it in messages, code, roster exports,
    or commits. Each session gets a different key.
-2. `check_in`: pass session_key and the last returned event cursor (initially 0).
-   Read active claims, the human owner's decisions, inbox, pauses, and handoff offers. If 100
-   events are returned, continue from the returned cursor until caught up.
+2. `check_in`: pass session_key and the sections you need (`include`). Bare, over MCP,
+   it is compact: `inbox_digest` (40 lines, `inbox_digest_more` counts the rest),
+   `counts`, `my_tasks`. With `events`, pass the last cursor and continue while 100 come
+   back; `latest_cursor` is where the log ends now. `board` is the full snapshot. A
+   session's inbox holds broadcasts from at most 12 h before it registered (72 h for
+   the human's); mail addressed to it always. `acknowledge_inbox` names at most 20 ids
+   (`more_ids` counts the rest).
 3. `claim_task`: provide title, literal relative paths/directories and next_step.
    To claim a queued task, also pass its task_id and exact existing resources.
 4. `update_task`: always use the latest task version; update status and next step.

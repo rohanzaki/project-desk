@@ -23,7 +23,7 @@ def test_default_response_shape_is_unchanged(desk):
     """No include -> exactly the historic keys. Live peers read these."""
     a=register(desk)
     out=desk.check_in(a['session_key'])
-    assert set(out)=={'session_id','cursor','events','inbox','board'}
+    assert set(out)=={'session_id','cursor','latest_cursor','events','inbox','board'}
     # enable_notifications reads this path directly; losing it breaks binding.
     assert 'sessions' in out['board']
 

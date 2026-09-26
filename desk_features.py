@@ -65,6 +65,7 @@ FEATURE_SCHEMA = '''
         resolved TEXT, resolved_by TEXT, resolution TEXT NOT NULL DEFAULT '');
     CREATE INDEX IF NOT EXISTS action_items_project ON action_items(project, status);
     CREATE INDEX IF NOT EXISTS action_items_task ON action_items(task_id);
+    CREATE TABLE IF NOT EXISTS session_starts (session_id TEXT PRIMARY KEY, started TEXT NOT NULL);
 '''
 
 MESSAGE_KINDS = ('message', 'question', 'answer', 'deploy', 'fyi', 'update', 'handoff',
@@ -127,6 +128,8 @@ class FeaturesMixin:
         columns = {r[1] for r in c.execute('PRAGMA table_info(crossover_members)')}
         if 'signed_version' not in columns:
             c.execute('ALTER TABLE crossover_members ADD COLUMN signed_version INTEGER')
+        c.execute('''INSERT OR IGNORE INTO session_starts(session_id, started)
+                     SELECT actor, MIN(created) FROM events WHERE kind='session.registered' GROUP BY actor''')
 
     def _display_name(self, c, session_id):
         if session_id == HUMAN:
@@ -188,13 +191,30 @@ class FeaturesMixin:
             ids.extend(frontier)
         return ids
 
+    # A new session does not inherit the project's whole broadcast history (252
+    # deploy notices on a busy day): broadcasts from before it started count only
+    # if they are this recent. Mail addressed to it is never dropped.
+    BROADCAST_BACKLOG_HOURS = 12
+    HUMAN_BACKLOG_HOURS = 72
+
+    def _broadcast_floors(self, c, session_id):
+        row = c.execute('SELECT started FROM session_starts WHERE session_id=?', (session_id,)).fetchone()
+        if not row:
+            return '', ''
+        started = datetime.fromisoformat(row['started'])
+        return ((started - timedelta(hours=self.BROADCAST_BACKLOG_HOURS)).isoformat(),
+                (started - timedelta(hours=self.HUMAN_BACKLOG_HOURS)).isoformat())
+
     def _unread_rows(self, c, s, ids, limit=200):
         marks = ','.join('?' * len(ids))
+        floor, human_floor = self._broadcast_floors(c, s['id'])
         return [dict(r) for r in c.execute(
             f'''SELECT m.* FROM messages m WHERE project=?
                 AND recipient IN ('all',?,{marks}) AND sender NOT IN ({marks}) AND NOT EXISTS
                 (SELECT 1 FROM receipts r WHERE r.message_id=m.id AND r.session_id IN ({marks}))
-                ORDER BY created LIMIT ?''', (s['project'], s['kind'], *ids, *ids, *ids, limit))]
+                AND (recipient NOT IN ('all',?) OR created >= CASE WHEN sender=? THEN ? ELSE ? END)
+                ORDER BY created LIMIT ?''',
+            (s['project'], s['kind'], *ids, *ids, *ids, s['kind'], HUMAN, human_floor, floor, limit))]
 
     def _log(self, c, task_id, project, author, kind, entry):
         c.execute('INSERT INTO task_log(task_id,project,author,kind,entry,created) VALUES(?,?,?,?,?,?)',
@@ -452,6 +472,8 @@ class FeaturesMixin:
             return {'messages': self._decorate(c, found), 'refused': refused,
                     'note': 'Reading does not acknowledge; call acknowledge_message when done.'}
 
+    ACK_IDS_SHOWN = 20
+
     def acknowledge_inbox(self, key, kinds=None, include_direct=False):
         if kinds is not None:
             kinds = [kinds] if isinstance(kinds, str) else list(kinds)
@@ -471,8 +493,11 @@ class FeaturesMixin:
             c.executemany('INSERT OR IGNORE INTO receipts VALUES(?,?,?)', [(mid, s['id'], stamp) for mid in chosen])
             if chosen:
                 self.event(c, s['project'], s['id'], 'inbox.acknowledged', {'count': len(chosen), 'kinds': kinds})
-            return {'acknowledged': len(chosen), 'message_ids': chosen, 'left_unread': kept,
-                    'note': 'Messages addressed to you stay unread unless include_direct is true.'}
+            out = {'acknowledged': len(chosen), 'message_ids': chosen[:self.ACK_IDS_SHOWN], 'left_unread': kept,
+                   'note': 'Messages addressed to you stay unread unless include_direct is true.'}
+            if len(chosen) > self.ACK_IDS_SHOWN:   # the count is the answer; 255 ids were 3K tokens of nothing
+                out['more_ids'] = len(chosen) - self.ACK_IDS_SHOWN
+            return out
 
     # ---- 5. questions and approvals ------------------------------------------
 

@@ -52,8 +52,9 @@ to the same shared AGENTS.md; do not create independent live rosters.
    agent `claude`, project `<your-project-slug>`, and your actual branch/worktree.
    Registration does not claim code. Save the returned session_id and session_key
    privately for this session. Never post session_key to shared notes.
-2. Call `check_in(session_key, since=0)`. Keep the returned cursor for the next
-   check-in. Read imported claims and current instructions before choosing work.
+2. Call `check_in(session_key, include=["inbox","counts","my_tasks"])` and read
+   current instructions before choosing work. `would_conflict(resources)` tells you
+   who holds a path; `include=["board"]` is the full snapshot (large) if you need it.
 3. If your previous task is imported, ask the human owner to reassign it to your registered
    session in the dashboard. Do not create an overlapping duplicate or mark an
    imported peer task complete. The importer preserved reported status and evidence;

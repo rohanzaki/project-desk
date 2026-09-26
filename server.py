@@ -177,9 +177,8 @@ def create_app(db=None, roster=None, announce=None):
     def check_in(session_key:str,since:int=0,include:list[str]|None=None)->dict:
         """Refresh presence, read task claims, pending inbox and events since cursor. Does NOT acknowledge messages.
 
-        include picks what comes back. Omit it and you get the whole dashboard
-        snapshot, which on a busy project runs to hundreds of KB and can overrun
-        your own context — ask for sections instead:
+        include picks what comes back. Omit it and you get a compact default
+        (inbox_digest, counts, my_tasks). Ask for more by name:
           inbox     unread messages addressed to you, bodies intact
           my_tasks  your tasks, long prose shortened (full text: get_task_context)
           counts    unread/task/session totals only
@@ -193,6 +192,11 @@ def create_app(db=None, roster=None, announce=None):
           action_items  open action items for you (and for agents), and the ones you wrote
         A typical agent turn wants include=["inbox","counts"].
         To learn who holds a path, use would_conflict — not a check_in section."""
+        if include is None:
+            out=store.check_in(session_key,since,list(store.AGENT_DEFAULT_SECTIONS))
+            out['note']=('Compact default. read_messages opens messages from the digest; include=["inbox"] '
+                         'gives unread bodies, ["board"] the full snapshot, ["events"] the log since your cursor.')
+            return out
         return store.check_in(session_key,since,include)
 
     @mcp.tool()

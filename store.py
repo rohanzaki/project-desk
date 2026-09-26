@@ -29,6 +29,10 @@ class Store(FeaturesMixin):
                 'inbox_digest', 'questions', 'approvals', 'queues', 'action_items')
     # What a caller that passes no `include` has always received.
     LEGACY_SECTIONS = ('events', 'inbox', 'board')
+    # What an agent's check_in() with no include gets over MCP (the hooks ask for
+    # LEGACY_SECTIONS by name). The whole board ran to hundreds of KB.
+    AGENT_DEFAULT_SECTIONS = ('inbox_digest', 'counts', 'my_tasks')
+    DIGEST_SHOWN = 40
     # Long prose fields are kept whole in the inbox (the body IS the point) but
     # shortened in task LISTS, where forty full summaries are what blows the
     # budget. Ask for one task by id when the whole text is wanted.
@@ -371,6 +375,7 @@ class Store(FeaturesMixin):
                       (sid, hashlib.sha256(key.encode()).hexdigest(), text(name,'name',120), kind,
                        project, text(branch,'branch',250), text(worktree,'worktree',1000), now()))
             self.event(c, project, sid, 'session.registered', {'name': name, 'kind': kind})
+            c.execute('INSERT OR IGNORE INTO session_starts(session_id, started) VALUES(?,?)', (sid, now()))
             resumable = self._resumable(c, {'id': sid, 'project': project, 'kind': kind, 'worktree': worktree,
                                             'branch': branch})
         result = {'session_id': sid, 'session_key': key, 'project': project,
@@ -962,6 +967,9 @@ class Store(FeaturesMixin):
             out={'session_id':s['id'],'cursor':events[-1]['seq'] if events else since}
             if wants('events'):
                 out['events']=events
+                # Where "now" is, so a hook binding starts here instead of replaying history.
+                out['latest_cursor']=c.execute('SELECT COALESCE(MAX(seq),0) FROM events WHERE project=?',
+                                               (s['project'],)).fetchone()[0]
             # This session plus any earlier session it resumed: their mail is its mail.
             ids=self._aliases(c,s['id'])
             if wants('inbox'):
@@ -969,7 +977,11 @@ class Store(FeaturesMixin):
                 # the bug this whole parameter exists to fix.
                 out['inbox']=self._decorate(c,self._unread_rows(c,s,ids,100))
             if wants('inbox_digest'):
-                out['inbox_digest']=self._inbox_digest(c,s,ids,self._unread_rows(c,s,ids,200))
+                rows=self._unread_rows(c,s,ids,100000)
+                digest=self._inbox_digest(c,s,ids,rows)   # sorted: mail for you, then questions, then oldest
+                out['inbox_digest']=digest[:self.DIGEST_SHOWN]
+                if len(digest)>self.DIGEST_SHOWN:
+                    out['inbox_digest_more']=len(digest)-self.DIGEST_SHOWN
             mine=None
             if wants('my_tasks') or wants('counts'):
                 mine=[self.task(c,r['id']) for r in c.execute(

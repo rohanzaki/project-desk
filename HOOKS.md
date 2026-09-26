@@ -47,9 +47,27 @@ crossover thread shows `task=crossover x-…`. Reply to the sender's session ID;
 acknowledge it as usual.
 
 Each line also carries the message kind when it is not a plain message, e.g.
-`UNACKNOWLEDGED MESSAGE m-… [deploy] from …` or `[question]`, so an agent can
-triage without reading every body. Answer a `[question]` with
-`send_message(reply_to=<its id>)`.
+`UNACKNOWLEDGED MESSAGE m-… [question] from …`, so an agent can triage without
+reading every body. Answer a `[question]` with `send_message(reply_to=<its id>)`.
+
+What arrives whole, and what arrives as one line (every injected line is paid for
+again on every later turn of the session):
+- `UNACKNOWLEDGED MESSAGE` (body up to 500 chars): mail addressed to this session,
+  anything the human sent, questions, answers, handoffs, decisions and crossover
+  traffic. Repeated on each user prompt until acknowledged.
+- `UNACKNOWLEDGED BROADCAST m-… [deploy] from …: <first line>`: other agents'
+  broadcasts (deploy starting/done, fyi, updates), once. After that a single line
+  `UNACKNOWLEDGED BROADCASTS <n> shown before and still unread (ids)` stands for
+  them until `acknowledge_inbox` clears them; `read_messages` opens any in full.
+- `YOUR TASK`: your own tasks, whole, on each prompt and whenever they change.
+- `OTHER CLAIM`: another agent's task, one short line, only when its status,
+  owner, pending owner or pause changes (not when it rewords its next step), plus
+  every active one at session start. `would_conflict` answers "who holds this path".
+- `ROHAN DECISION`: the human's decisions; a session start re-shows those from the
+  last 2 days.
+A new binding starts at the present event, not at event 0: the board and the
+unread inbox orient it. A new session's inbox holds broadcasts from at most 12 h
+before it started (72 h for the human's); mail addressed to it is never dropped.
 
 ## What the hooks do
 
@@ -73,8 +91,10 @@ link to. An unbound session in a workspace with neither hears nothing. Either
 way, the lookup runs at most once every 5 minutes. The hooks and the CLI use
 `PROJECT_DESK_URL` (default `http://127.0.0.1:7331`).
 
-One new-notification continuation is allowed when a turn is about to stop.
-Repeated Stop hooks do not loop; the agent's own status updates do not continue
+One new-notification continuation is allowed when a turn is about to stop, and
+only for something urgent: mail for you, the human, your own task, or an
+undelivered message. Other news (broadcasts, other agents' status changes) does
+not cost a turn; it is left for the next prompt or tool call. Repeated Stop hooks do not loop; the agent's own status updates do not continue
 the turn. Human-paused work cannot trigger Stop continuation. A service outage
 retains the cursor, emits a bounded warning, and does not force continuation.
 Hooks are reminders, not a complete shell/deployment enforcement boundary.

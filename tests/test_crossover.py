@@ -362,7 +362,7 @@ def test_check_in_crossovers_section_and_default_unchanged(desk):
     x = d.start_crossover(a['session_key'], ta['id'], ['beta'])
     pending = d.check_in(b['session_key'], include=['crossovers'])['crossovers']
     assert [c['id'] for c in pending] == [x['id']]
-    assert set(d.check_in(b['session_key'])) == {'session_id', 'cursor', 'events', 'inbox', 'board'}
+    assert set(d.check_in(b['session_key'])) == {'session_id', 'cursor', 'latest_cursor', 'events', 'inbox', 'board'}
     with pytest.raises(ValueError):
         d.check_in(b['session_key'], include=['nope'])
 

@@ -104,6 +104,40 @@ def compact(value, limit=360):
     return re.sub(r'[\x00-\x1f\x7f]', ' ', str(value))[:limit]
 
 
+# What a hook line costs is paid again on every later turn of the session, so
+# only what the agent must act on is sent whole. A message addressed to this
+# session, anything the human sent, and questions, answers, handoffs, decisions
+# and crossover traffic keep their body (500 chars). Other broadcasts (deploy
+# starting/done, fyi, updates) arrive once as their first line, and afterwards
+# only as a count with ids until acknowledged.
+HOOK_SECTIONS = ['events', 'inbox', 'board']   # named: an agent's bare check_in is now the compact one
+DECISION_DAYS = 2  # a session start re-shows the human's decisions this recent
+INBOX_PAGE = 100   # check_in's inbox page: fewer means nothing unread was left out
+IMPORTANT_KINDS = frozenset({'question', 'answer', 'handoff', 'decision', 'crossover'})
+BROADCAST_CHARS = 160
+EARLIER_IDS_SHOWN = 25
+# Another agent's task is news when one of these changes, not when it bumps its
+# version to reword a next step: claim_task already refuses overlapping paths.
+TASK_NEWS_FIELDS = ('owner', 'pending_owner', 'status', 'human_paused')
+# Lines worth an extra turn at Stop. Everything else waits for the next prompt.
+URGENT_PREFIXES = ('UNACKNOWLEDGED MESSAGE', 'PENDING MESSAGE', 'ROHAN', 'YOUR TASK', 'Task ')
+
+
+def first_line(body, limit=BROADCAST_CHARS):
+    line = next((part.strip() for part in str(body).splitlines() if part.strip()), '')
+    return compact(line if len(line) <= limit else line[:limit - 1] + '…', limit)
+
+
+def important(message):
+    # The inbox only holds mail for this session (or one it resumed) and broadcasts.
+    return (message.get('recipient') not in ('all', 'claude', 'codex') or message.get('sender') == 'rohan'
+            or message.get('kind') in IMPORTANT_KINDS or bool(message.get('crossover_id')))
+
+
+def urgent(lines):
+    return any(line.startswith(URGENT_PREFIXES) for line in lines)
+
+
 def collect(state, response, initial=False, full=False):
     """Turn a check_in response into the lines injected into an agent's context.
 
@@ -120,6 +154,10 @@ def collect(state, response, initial=False, full=False):
     overlap, so two tasks can never hold overlapping paths; such a line could
     only ever be empty, and an agent reading its absence would believe it had
     checked something. Ask would_conflict before planning around a file.
+
+    A user prompt (initial without full) re-states only this session's own
+    tasks. It used to re-state every task the session had ever seen, because
+    they were all in `prior`: the whole board, again, on every prompt.
 
     Produces bounded context and advances delivery state, never server receipts.
     """
@@ -145,32 +183,55 @@ def collect(state, response, initial=False, full=False):
         changed = current[tid] != prior.get(tid)
         if tid in self_updates and tid not in incoming_updates and not initial:
             changed = False  # Our own status writes must not cause a Stop loop.
-        if (changed or initial) and (mine or (full and active)
-                                     or tid in prior or tid in incoming_updates):
-            prefix = 'YOUR TASK' if mine else 'OTHER CLAIM'
-            lines.append(f"{prefix} {tid}: {compact(task['title'], 100)}; {task['status']}; "
-                         f"owner={names.get(task['owner'], task['owner'] or 'unassigned')} ({task['owner']}); "
-                         f"version={task['version']}; human_paused={bool(task.get('human_paused'))}; "
-                         f"paths={compact(', '.join(task['resources']), 220)}; "
-                         f"{'summary' if task['status'] == 'DONE' else 'next'}="
-                         f"{compact(task.get('summary' if task['status'] == 'DONE' else 'next_step', ''), 240)}")
+        if mine:
+            if changed or initial:
+                lines.append(f"YOUR TASK {tid}: {compact(task['title'], 100)}; {task['status']}; "
+                             f"owner={names.get(task['owner'], task['owner'] or 'unassigned')} ({task['owner']}); "
+                             f"version={task['version']}; human_paused={bool(task.get('human_paused'))}; "
+                             f"paths={compact(', '.join(task['resources']), 220)}; "
+                             f"{'summary' if task['status'] == 'DONE' else 'next'}="
+                             f"{compact(task.get('summary' if task['status'] == 'DONE' else 'next_step', ''), 240)}")
+            continue
+        was = prior.get(tid) or {}
+        news = any(current[tid].get(k) != was.get(k) for k in TASK_NEWS_FIELDS)
+        if (full and active) or (news and (tid in prior or tid in incoming_updates)):
+            done = task['status'] == 'DONE'
+            lines.append(f"OTHER CLAIM {tid}: {compact(task['title'], 90)}; {task['status']}; "
+                         f"owner={names.get(task['owner'], task['owner'] or 'unassigned')}"
+                         + (f"; summary={compact(task.get('summary', ''), 160)}" if done
+                            else f"; paths={compact(', '.join(task['resources']), 120)}"))
     for tid in prior.keys() - current.keys():
         lines.append(f'Task {tid} disappeared from this project snapshot; check ownership before editing.')
     seen = set(state.get('messages', []))
     inbox = response.get('inbox', [])
+    earlier = []
     for message in inbox:
-        if initial or message['id'] not in seen:
-            sender = compact(message['sender'], 80)
-            if message.get('from_project'):   # sent from another project: say which, so the reply can go back
-                sender += (f" (project {compact(message['from_project'], 100)}, "
-                           f"{compact(message.get('from_name') or '', 100)})")
-            thread = message.get('task_id') or (f"crossover {message['crossover_id']}"
-                                                if message.get('crossover_id') else 'Team Inbox')
-            kind = message.get('kind')
-            tag = f" [{compact(kind, 20)}]" if kind and kind != 'message' else ''
+        new = message['id'] not in seen
+        whole = important(message)
+        if not (new or (initial and (whole or full))):
+            if initial:
+                earlier.append(message['id'])
+            continue
+        sender = compact(message['sender'], 80)
+        if message.get('from_project'):   # sent from another project: say which, so the reply can go back
+            sender += (f" (project {compact(message['from_project'], 100)}, "
+                       f"{compact(message.get('from_name') or '', 100)})")
+        thread = message.get('task_id') or (f"crossover {message['crossover_id']}"
+                                            if message.get('crossover_id') else 'Team Inbox')
+        kind = message.get('kind')
+        tag = f" [{compact(kind, 20)}]" if kind and kind != 'message' else ''
+        if whole:
             lines.append(f"UNACKNOWLEDGED MESSAGE {message['id']}{tag} from {sender} "
                          f"task={compact(thread, 80)}: "
                          f"{compact(message['body'], 500)}")
+        else:
+            lines.append(f"UNACKNOWLEDGED BROADCAST {message['id']}{tag} from {sender}: "
+                         f"{first_line(message['body'])}")
+    if earlier:
+        shown = ', '.join(earlier[:EARLIER_IDS_SHOWN]) + (' …' if len(earlier) > EARLIER_IDS_SHOWN else '')
+        lines.append(f"UNACKNOWLEDGED BROADCASTS {len(earlier)} shown before and still unread ({shown}). "
+                     'Skim with check_in(include=["inbox_digest"]) or read_messages; '
+                     'clear with acknowledge_inbox.')
     # Preserve only current inbox IDs. The server remains authoritative for receipts.
     state['messages'] = [m['id'] for m in inbox]
     for event in response['events']:
@@ -186,13 +247,29 @@ def collect(state, response, initial=False, full=False):
         elif event['actor'] == 'rohan' and event['kind'].startswith('task.'):
             lines.append(f"ROHAN EVENT #{event['seq']} {event['kind']}: {compact(json.dumps(event['data']), 300)}")
         elif (event['kind'] == 'message.sent' and event['actor'] != me
+              and len(inbox) >= INBOX_PAGE   # a shorter page already holds every unread message
               and event['data'].get('recipient') in ('all', state.get('agent', 'codex'), me)
               and event['data'].get('message_id') not in {m['id'] for m in inbox}):
             lines.append(f"PENDING MESSAGE {event['data'].get('message_id')}: the inbox page is bounded; "
                          'read/acknowledge older messages to expose this message. Its body has not been delivered.')
+    if full:   # orientation: the human's recent decisions, which the event cursor may start after
+        shown = {line.split(' ')[2].rstrip(':') for line in lines if line.startswith('ROHAN DECISION')}
+        cutoff = time.time() - DECISION_DAYS * 86400
+        for note in board.get('notes', []):
+            if (note.get('author') == 'rohan' and note.get('kind') == 'decision' and note['id'] not in shown
+                    and _epoch(note.get('created')) >= cutoff):
+                lines.append(f"ROHAN DECISION {note['id']}: {compact(note['body'], 500)}")
     state['tasks'] = current
     state['cursor'] = response['cursor']
     return lines, owned_paused
+
+
+def _epoch(stamp):
+    try:
+        from datetime import datetime
+        return datetime.fromisoformat(str(stamp)).timestamp()
+    except ValueError:
+        return 0
 
 
 def output_for(event, context, payload, paused=False):
@@ -232,7 +309,8 @@ def run_hook(payload, state_root=STATE_ROOT, call=call_desk, clock=time.time):
             initial = event in ('SessionStart', 'UserPromptSubmit')
             started = time.monotonic()
             for page in range(10):
-                response = call('check_in', {'session_key': state['session_key'], 'since': state.get('cursor', 0)})
+                response = call('check_in', {'session_key': state['session_key'], 'since': state.get('cursor', 0),
+                                             'include': HOOK_SECTIONS})
                 new, paused = collect(state, response, initial and page == 0,
                                       full=(event == 'SessionStart' and page == 0))
                 lines.extend(new)
@@ -241,6 +319,10 @@ def run_hook(payload, state_root=STATE_ROOT, call=call_desk, clock=time.time):
                 if page == 9 or time.monotonic() - started >= 8:
                     lines.append('More events remain; use check_in from the stored cursor to finish paging.')
                     break
+            if event == 'Stop' and not urgent(lines):
+                # Not worth another turn: leave state untouched so the next prompt
+                # or tool call delivers it, instead of forcing a continuation now.
+                return {}
             state['last_check'] = now
             state.pop('last_error', None)
             if initial:
@@ -252,8 +334,9 @@ def run_hook(payload, state_root=STATE_ROOT, call=call_desk, clock=time.time):
                       'Project Desk; this hook does not acknowledge, claim, reassign, or finish tasks. '
                       'Reply only when action or an answer is needed; do not broadcast a new update merely to echo an alert.\n')
             # Inbox and human decisions must not disappear behind unrelated task traffic.
-            lines.sort(key=lambda line: 0 if line.startswith(('UNACKNOWLEDGED', 'PENDING MESSAGE', 'ROHAN'))
-                       else 1 if line.startswith(('YOUR TASK', 'Project Desk session')) else 2)
+            lines.sort(key=lambda line: 0 if line.startswith(('UNACKNOWLEDGED MESSAGE', 'PENDING MESSAGE', 'ROHAN'))
+                       else 1 if line.startswith(('YOUR TASK', 'Project Desk session'))
+                       else 2 if line.startswith('UNACKNOWLEDGED BROADCAST') else 3)
             body = '\n'.join(lines)
             if len(body) > 6500:
                 body = body[:6500] + '\n[Truncated: call check_in for the full board and inbox.]'
@@ -276,7 +359,7 @@ def run_hook(payload, state_root=STATE_ROOT, call=call_desk, clock=time.time):
 
 def bind_credentials(thread, credentials, project, state_root=STATE_ROOT, call=call_desk, agent='codex'):
     path = binding_path(state_root, thread)
-    response = call('check_in', {'session_key': credentials['session_key'], 'since': 0})
+    response = call('check_in', {'session_key': credentials['session_key'], 'since': 0, 'include': HOOK_SECTIONS})
     if response['session_id'] != credentials['session_id'] or response['board']['project'] != project:
         raise ValueError('Session does not belong to requested project')
     registered = next(s for s in response['board']['sessions'] if s['id'] == credentials['session_id'])
@@ -291,8 +374,11 @@ def bind_credentials(thread, credentials, project, state_root=STATE_ROOT, call=c
             if current['session_id'] != credentials['session_id']:
                 raise ValueError('Thread is already bound to a different session')
             return path
+        # Start at the present: the board and the unread inbox orient a new binding.
+        # Cursor 0 replayed the project's whole event history, ten pages a call.
         private_write(path, {'thread_id': thread, 'project': project, 'agent': agent, 'session_id': credentials['session_id'],
-                             'session_key': credentials['session_key'], 'cursor': 0})
+                             'session_key': credentials['session_key'],
+                             'cursor': response.get('latest_cursor', 0)})
     return path
 
 

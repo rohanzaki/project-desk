@@ -83,7 +83,7 @@ def test_unread_messages_are_never_filtered_out(desk):
     for i in range(4): desk.claim(peer['session_key'],f'Theirs {i}',[f'src/other{i}'],'n')
     desk.message(peer['session_key'],'all','read me')
     lines,_=collect(state_for(me),response_for(desk,me),initial=True,full=False)
-    assert sum(1 for l in lines if l.startswith('UNACKNOWLEDGED MESSAGE'))==1
+    assert sum(1 for l in lines if l.startswith('UNACKNOWLEDGED'))==1
 
 
 def test_the_filter_measurably_shrinks_an_ordinary_turn(desk):

@@ -8,6 +8,7 @@ import time
 import pytest
 from starlette.testclient import TestClient
 
+from deskcore import now
 from store import Store, Conflict
 
 
@@ -180,8 +181,8 @@ def test_digest_puts_mail_for_you_first_and_names_kinds(desk):
 def test_legacy_messages_get_an_inferred_kind(desk):
     d, a, b, _ = desk
     with d.connection(True) as c:   # a message written by the previous release: no meta row
-        c.execute("INSERT INTO messages VALUES('m-legacy00001','alpha',?, 'all', 'MIGRATION ANNOUNCEMENT: x', NULL, '2026-01-01T00:00:00+00:00')",
-                  (b['session_id'],))
+        c.execute("INSERT INTO messages VALUES('m-legacy00001','alpha',?, 'all', 'MIGRATION ANNOUNCEMENT: x', NULL, ?)",
+                  (b['session_id'], now()))
     digest = d.check_in(a['session_key'], include=['inbox_digest'])['inbox_digest']
     assert digest[0]['kind'] == 'deploy'
 
