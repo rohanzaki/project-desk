@@ -231,3 +231,19 @@ def test_desk_restart_notices_arrive_whole_from_any_project(desk):
     result = text(run(store, tmp_path))
     assert 'UNACKNOWLEDGED MESSAGE' in result and 'detail detail' in result
     assert 'UNACKNOWLEDGED BROADCAST ' not in result
+
+
+def test_the_hook_board_is_slim_and_enough_for_collect(desk):
+    store, peer, _ = desk
+    me = store.register('Me', 'codex', 'test', 'me', '/tmp/me')
+    t = store.claim(peer['session_key'], 'Theirs', ['src/theirs'], 'n' * 900)
+    note = store.human('test', 'note', {'body': 'Keep reports on 70b'})
+    slim = store.check_in(me['session_key'], include=['events', 'inbox', 'hook_board'])
+    full = store.check_in(me['session_key'])
+    assert slim['board']['slim'] and len(json.dumps(slim['board'])) < len(json.dumps(full['board']))
+    row = next(x for x in slim['board']['tasks'] if x['id'] == t['id'])
+    assert row['resources'] == ['src/theirs'] and len(row['next_step']) == 300
+    lines_slim, _ = hooks.collect(state_for(me), slim, initial=True, full=True)
+    lines_full, _ = hooks.collect(state_for(me), full, initial=True, full=True)
+    assert [l.split(':')[0] for l in lines_slim] == [l.split(':')[0] for l in lines_full]
+    assert any(note['note_id'] in l for l in lines_slim)

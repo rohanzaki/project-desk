@@ -13,9 +13,10 @@ from projects import DECLARATION, DEFAULT_DESK, display_name, resolve_project, v
 from deskcore import Conflict, HUMAN, ident, now, overlaps, scopes, text  # noqa: F401  (re-exported)
 from desk_features import FeaturesMixin, MESSAGE_KINDS, infer_kind
 from desk_board import BoardMixin
+from desk_requests import RequestsMixin
 
 
-class Store(FeaturesMixin, BoardMixin):
+class Store(FeaturesMixin, BoardMixin, RequestsMixin):
     CONTEXT_COMMENT_LIMIT = 50
     CONTEXT_HANDOFF_LIMIT = 20
     SNAPSHOT_HANDOFF_LIMIT = 100
@@ -27,7 +28,7 @@ class Store(FeaturesMixin, BoardMixin):
     # twice in one night, so the message the agent needed could not be read at
     # all. An agent should ask for sections instead: ['inbox','conflicts'].
     SECTIONS = ('events', 'inbox', 'board', 'my_tasks', 'counts', 'crossovers',
-                'inbox_digest', 'questions', 'approvals', 'queues', 'action_items')
+                'inbox_digest', 'questions', 'approvals', 'queues', 'action_items', 'hook_board')
     # What a caller that passes no `include` has always received.
     LEGACY_SECTIONS = ('events', 'inbox', 'board')
     # What an agent's check_in() with no include gets over MCP (the hooks ask for
@@ -110,6 +111,7 @@ class Store(FeaturesMixin, BoardMixin):
             ''')
             self._migrate_features(c)
             self._migrate_board(c)
+            self._migrate_requests(c)
             self._sync_registry(c)
         self.path.chmod(0o600)
 
@@ -1031,7 +1033,25 @@ class Store(FeaturesMixin, BoardMixin):
                                for r in c.execute(f'SELECT DISTINCT resource FROM resource_queue WHERE session_id IN ({marks})',ids)]
             if wants('board'):
                 out['board']=self._snapshot(c,s['project'])
+            elif wants('hook_board'):
+                # The hooks read only these fields; the full board (1.2 MB) queued the desk.
+                out['board']=self._hook_board(c,s['project'])
             return out
+
+    HOOK_TEXT_CHARS = 300
+
+    def _hook_board(self,c,project):
+        cut=lambda value: (value or '')[:self.HOOK_TEXT_CHARS]
+        tasks=[{'id':r['id'],'title':r['title'],'owner':r['owner'],'pending_owner':r['pending_owner'],
+                'status':r['status'],'human_paused':r['human_paused'],'version':r['version'],
+                'resources':json.loads(r['resources']),'summary':cut(r['summary']),'next_step':cut(r['next_step'])}
+               for r in c.execute('SELECT id,title,owner,pending_owner,status,human_paused,version,resources,summary,next_step '
+                                  'FROM tasks WHERE project=? ORDER BY updated DESC',(project,))]
+        return {'project':project,'slim':True,
+                'sessions':[dict(r) for r in c.execute('SELECT id,name,kind,last_seen,imported FROM sessions WHERE project=?',(project,))],
+                'tasks':tasks,
+                'notes':[dict(r) for r in c.execute('SELECT id,kind,author,substr(body,1,600) AS body,created FROM notes '
+                                                    'WHERE project=? ORDER BY created DESC LIMIT 30',(project,))]}
 
     def _snapshot(self,c,project):
         sessions=[dict(r) for r in c.execute('SELECT id,name,kind,project,branch,worktree,last_seen,imported FROM sessions WHERE project=?',(project,))]
@@ -1196,6 +1216,8 @@ class Store(FeaturesMixin, BoardMixin):
                           (project,key_,until,now()))
                 self.event(c,project,HUMAN,'snooze.set',{'key':key_,'until':until})
                 return {'key':key_,'until':until}
+            if action in ('desk_request.approve','desk_request.reject'):
+                return self._decide_desk_request(c,project,data,action=='desk_request.approve')
             if action=='snooze.clear':
                 key_=text(data.get('key',''),'snooze key',200)
                 c.execute('DELETE FROM snoozes WHERE project=? AND key=?',(project,key_))

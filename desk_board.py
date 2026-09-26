@@ -35,7 +35,7 @@ BOARD_SCHEMA = '''
 #   f"Resource overlaps {existing['resource']} held by {existing['task_id']}. Request a handoff; do not edit."
 _OVERLAP_RE = re.compile(r'^Resource overlaps (.+) held by (t-[0-9a-f]{12})\.')
 
-_ATTENTION_ORDER = {'approval': 0, 'question': 1, 'blocked': 2, 'stale': 3, 'refused': 4, 'action': 5}
+_ATTENTION_ORDER = {'approval': 0, 'question': 1, 'desk_request': 2, 'blocked': 3, 'stale': 4, 'refused': 5, 'action': 6}
 _BLOCKED_RE = re.compile(
     r'\b(rohan|you|your|human|owner|decision|decide|approve|approval|go.?ahead|ok to|confirm)\b', re.I)
 
@@ -309,6 +309,9 @@ class BoardMixin:
             items = []
             for project in plist:
                 items.extend(self._attention_for_project(c, project))
+            # Desk feature requests are global: shown once, tagged with the asking project.
+            items.extend(i for i in self._request_attention(c)
+                         if not projects or projects == 'all' or i['project'] in plist)
             active = {(r['project'], r['key']): r['until']
                      for r in c.execute('SELECT project,key,until FROM snoozes WHERE until>?', (now(),))}
             if include_snoozed:
@@ -316,14 +319,15 @@ class BoardMixin:
                     until = active.get((item['project'], item['key']))
                     if until:
                         item['snoozed_until'] = until
-            else:
+            snoozed_total = sum(1 for i in items if (i['project'], i['key']) in active)
+            if not include_snoozed:
                 items = [i for i in items if (i['project'], i['key']) not in active]
             items.sort(key=lambda i: i['created'], reverse=True)
             items.sort(key=lambda i: _ATTENTION_ORDER[i['kind']])
             counts = {}
             for i in items:
                 counts[i['project']] = counts.get(i['project'], 0) + 1
-            return {'items': items, 'counts': counts, 'total': len(items)}
+            return {'items': items, 'counts': counts, 'total': len(items), 'snoozed_total': snoozed_total}
 
     # ---- GET /api/digest --------------------------------------------------------
 
@@ -351,11 +355,13 @@ class BoardMixin:
             claimed = [{'task_id': r['task_id'], 'title': r['title'], 'owner_name': cn.get(r['owner'], r['owner']),
                        'created': r['created']} for r in claimed_rows]
             question_rows = c.execute(
-                'SELECT message_id,asker,recipient,task_id,created FROM questions WHERE project=? AND created>? '
-                'ORDER BY created DESC LIMIT 20', (project, since)).fetchall()
+                'SELECT q.message_id,q.asker,q.recipient,q.task_id,q.created,m.body FROM questions q '
+                'LEFT JOIN messages m ON m.id=q.message_id WHERE q.project=? AND q.created>? '
+                'ORDER BY q.created DESC LIMIT 20', (project, since)).fetchall()
             qn = self._names(c, [r['asker'] for r in question_rows])
             questions = [{'message_id': r['message_id'], 'asker_name': qn.get(r['asker'], r['asker']),
-                         'recipient': r['recipient'], 'task_id': r['task_id'], 'created': r['created']}
+                         'recipient': r['recipient'], 'task_id': r['task_id'], 'created': r['created'],
+                         'body': _first_line(r['body'] or '', 200)}
                         for r in question_rows]
             approval_rows = c.execute(
                 'SELECT * FROM approvals WHERE project=? AND created>? ORDER BY created DESC LIMIT 20',

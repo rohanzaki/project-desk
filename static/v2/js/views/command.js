@@ -40,6 +40,23 @@ export function itemActions(ctx, item) {
   return out.map((b, i) => ({...b, key: b.key || String(i + 1)}));
 }
 
+// The server sends raw facts; this turns each kind into a title and one meta line.
+export function present(item) {
+  const n = (item.item_ids || []).length;
+  switch (item.kind) {
+    case 'action': return {title: (item.bodies && item.bodies.length ? item.bodies.join(' · ') : item.title),
+      meta: `${n || 1} left for you on ${item.task_title || 'no task'}`};
+    case 'stale': return {title: item.task_title || item.title,
+      meta: `owner silent ${ago(item.owner_last_seen)} · still holds ${(item.resources || []).join(', ')} · claims never expire on their own`};
+    case 'refused': return {title: `Wanted ${(item.resources || []).join(', ')} for “${item.title}”`,
+      meta: `held by ${item.holder_name || item.holder_session || 'another task'}${item.holder_task_id ? ' on ' + item.holder_task_id : ''} · refused, not merged`};
+    case 'blocked': return {title: item.task_title || item.title, meta: item.next_step || item.meta || ''};
+    case 'question': return {title: item.body ? firstLine(item.body, 240) : item.title, meta: item.task_title || item.meta || ''};
+    case 'desk_request': return {title: item.title, meta: item.meta || ''};
+    default: return {title: item.title, meta: item.meta || item.task_title || ''};
+  }
+}
+
 function SnoozeMenu({item, onDone}) {
   const {actions} = useContext(Desk);
   return html`<div class="snooze-menu" role="menu" onClick=${e => e.stopPropagation()}>
@@ -53,11 +70,12 @@ function AttRow({item, i, cur, multi}) {
   useEffect(() => { if (ctx.ui.snoozeFor === item.key) { setMenu(true); ctx.ui.snoozeFor = null; } });
   const w = item.who ? whoFor(ctx.board, item.who.id, item.who) : whoFor(ctx.board, '');
   const acts = itemActions(ctx, item);
+  const shown = present(item);
   return html`<div class=${`att-row${cur ? ' cur' : ''}`} onClick=${() => { ctx.setCursor(i); if (item.task_id && item.project === ctx.project()) ctx.select(item.task_id); }}>
     <div class=${`att-type k-${item.kind}`}><span class="sq"></span>${TYPE[item.kind] || item.kind}</div>
     <div class="att-main">
-      <div class="att-title">${item.title}</div>
-      <div class="att-meta">${multi ? html`<span class="proj-tag">${item.project}</span>` : ''}<${Who} w=${w} /><span class="t">${item.meta || item.task_title || ''}</span><span>${when(item.created)}</span></div>
+      <div class="att-title" title=${shown.title}>${shown.title}</div>
+      <div class="att-meta">${multi ? html`<span class="proj-tag">${item.project}</span>` : ''}<${Who} w=${w} /><span class="t" title=${shown.meta}>${shown.meta}</span><span>${when(item.created)}</span></div>
     </div>
     <div class="att-acts">
       ${acts.map(b => html`<${Btn} label=${b.label} kind=${b.kind || ''} k=${b.key} onClick=${b.run} />`)}

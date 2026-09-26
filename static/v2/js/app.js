@@ -31,7 +31,7 @@ function localAttention(b, project) {
     const m = (b.messages || []).find(x => x.id === q.message_id);
     if (['rohan', 'human'].includes(q.recipient)) items.push({key: `question:${q.message_id}`, project, kind: 'question', message_id: q.message_id, title: m ? m.body : 'Open question', body: m ? m.body : '', task_id: m && m.task_id, who: {id: q.asker}, created: q.created});
   }
-  for (const s of b.stale_claims || []) items.push({key: `stale:${s.task_id}`, project, kind: 'stale', task_id: s.task_id, title: `${s.title} — owner silent ${ago(s.owner_last_seen)}, still holds ${(s.resources || []).join(', ')}`, meta: 'Claims never expire on their own', who: {id: s.owner, name: s.owner_name}, created: s.owner_last_seen});
+  for (const s of b.stale_claims || []) items.push({key: `stale:${s.task_id}`, project, kind: 'stale', task_id: s.task_id, title: `${s.title} — owner silent ${ago(s.owner_last_seen)}, still holds ${(s.resources || []).join(', ')}`, meta: 'Claims never expire on their own', who: {id: s.owner, name: s.owner_name}, created: s.owner_last_seen, owner_last_seen: s.owner_last_seen, resources: s.resources, task_title: s.title});
   const byTask = new Map();
   for (const i of b.action_items || []) if (i.status === 'open' && i.assignee === HUMAN) { const k = i.task_id || ''; if (!byTask.has(k)) byTask.set(k, []); byTask.get(k).push(i); }
   for (const [k, list] of byTask) items.push({key: `action:${project}:${k || 'none'}`, project, kind: 'action', item_ids: list.map(i => i.id), task_id: k || null, task_title: list[0].task_title,
@@ -289,9 +289,21 @@ function Nav({ctx, view, go, counts, projects, project, setProject, open, notify
     <div class="nav-foot">
       <button type="button" class="btn-ghost" onClick=${() => ctx.actions.connect()}>Connect agents</button>
       <button type="button" class="btn-ghost" onClick=${toggleNotify}>${notify ? 'Notifications on' : 'Notify me'}</button>
+      <${DefaultPage} ctx=${ctx} />
       <div class="hint">⌘K palette · J/K move · 1–3 answer · E tick · S snooze · / search · <a href="/classic">classic page</a></div>
     </div>
   </nav>`;
+}
+
+// Which page opens at the desk's address. Switching needs no restart.
+function DefaultPage({ctx}) {
+  const [page, setPage] = useState(undefined);
+  useEffect(() => { api.uiDefault().then(setPage); }, []);
+  if (!page) return null;
+  const flip = async next => { try { const r = await api.setUiDefault(next); setPage(r.default); ctx.flash(next === 'v2' ? 'This is now the page the desk opens with. The old one stays at /classic.' : 'The desk opens with the classic page again.'); } catch (e) { ctx.flash(e.message, true); } };
+  return page === 'v2'
+    ? html`<button type="button" class="btn-ghost" title="The desk address opens this page" onClick=${() => flip('classic')}>Default page · switch to classic</button>`
+    : html`<button type="button" class="btn-ghost" onClick=${() => flip('v2')}>Make this my default page</button>`;
 }
 
 function BottomNav({view, go, counts, onMore}) {

@@ -43,6 +43,8 @@ export const search = (project, text) => optional('/api/search', {project, q: te
 export const events = (project, before, limit = 50) => optional('/api/events', {project, before, limit});
 export const lanes = (project, hours = 12) => optional('/api/lanes', {project, hours});
 export const deskRequests = async status => { const d = await optional('/api/desk-requests', {status}); return d ? d.requests || [] : null; };
+export const uiDefault = async () => { try { return (await get('/api/ui')).data.default; } catch (e) { return null; } };
+export const setUiDefault = page => mutate('', 'ui.default', {page});
 export const projects = async () => (await get('/api/projects')).data.projects || [];
 export const connect = async slug => (await get(`/api/projects/${encodeURIComponent(slug)}/connect`)).data;
 

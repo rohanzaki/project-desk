@@ -54,6 +54,8 @@ for the human's decision, queue_for to wait for a service, wait_for to block unt
 Whatever you leave for the human or others at the end of a task or turn (things to do, decide or
 check), save as action items on your task: update_task(action_items=[...]) is the task's whole list (it
 replaces the earlier one); add_action_items(task_id=...) adds to it. Say so in chat too.
+Desk slowing you or missing something? request_desk_feature (or support_desk_request an existing one);
+build desk changes only via volunteer_desk_request after the human approves.
 Check in before edits and at milestones.
 Claim literal relative file/directory paths before editing. Conflicts mean stop overlapping work.
 Before you plan around a file, would_conflict tells you who holds it without claiming it.
@@ -459,6 +461,34 @@ def create_app(db=None, roster=None, announce=None):
         """Publish a validated changelog note and linked broadcast with independent receipts."""
         return store.publish_update(session_key,title,body,commit_ref,validation,task_id)
 
+    @mcp.tool()
+    def request_desk_feature(session_key:str,title:str,why:str,proposal:str='')->dict:
+        """Ask for an improvement to Project Desk itself when it slows your work or lacks something.
+        why: what hurts and how often. The reply lists similar open requests: support one of those instead of
+        filing a duplicate. The human owner approves or rejects it; nobody builds it before approval."""
+        return store.request_desk_feature(session_key,title,why,proposal)
+
+    @mcp.tool()
+    def list_desk_requests(session_key:str,status:str|None=None)->dict:
+        """Desk feature requests from every project: proposed, approved, in_progress, done, rejected, withdrawn."""
+        return store.list_desk_requests(session_key,status)
+
+    @mcp.tool()
+    def support_desk_request(session_key:str,request_id:str,note:str='')->dict:
+        """Back an open desk request with your own use case instead of filing a duplicate."""
+        return store.support_desk_request(session_key,request_id,note)
+
+    @mcp.tool()
+    def volunteer_desk_request(session_key:str,request_id:str)->dict:
+        """Build an APPROVED desk request (first come). Refused while it is only proposed. Claims a task on
+        service:project-desk-dev (one desk change at a time) and returns the build and restart checklist."""
+        return store.volunteer_desk_request(session_key,request_id)
+
+    @mcp.tool()
+    def withdraw_desk_request(session_key:str,request_id:str,reason:str='')->dict:
+        """Withdraw your own request while it is still proposed (e.g. it duplicates another)."""
+        return store.withdraw_desk_request(session_key,request_id,reason)
+
     @mcp.resource('desk://rules')
     def rules()->str: return INSTRUCTIONS
 
@@ -545,10 +575,30 @@ def create_app(db=None, roster=None, announce=None):
         if not path.exists(): return PlainTextResponse('Not found',404)
         return FileResponse(path)
 
+    # Which page '/' serves: the human switches it from the v2 page, no restart needed.
+    ui_file=Path(store.path).parent/'dashboard-default'
+    def ui_default():
+        try: value=ui_file.read_text().strip()
+        except OSError: value=''
+        return value if value in ('v2','classic') and (value!='v2' or (ROOT/'static/v2/index.html').exists()) else 'classic'
+    async def home(request):
+        return await v2(request) if ui_default()=='v2' else await index(request)
+    async def classic(request): return await index(request)
+    async def ui_state(request): return JSONResponse({'default':ui_default()})
+    async def desk_requests_route(request):
+        status=request.query_params.get('status') or None
+        try: return JSONResponse({'requests':store.desk_requests(status)})
+        except ValueError as e: return JSONResponse({'error':str(e)},400)
+
     async def action(request):
         try:
             body=await request.json()
             name=body['action']; data=body.get('data',{})
+            if name=='ui.default':
+                page=data.get('page')
+                if page not in ('v2','classic'): raise ValueError("page is 'v2' or 'classic'")
+                ui_file.write_text(page+'\n')
+                return JSONResponse({'default':ui_default()})
             if name=='project.create':
                 return JSONResponse(store.create_project(data.get('slug',''),data.get('name',''),data.get('repo_roots',[])))
             if name=='project.update':
@@ -632,13 +682,13 @@ def create_app(db=None, roster=None, announce=None):
                 await asyncio.to_thread(export_roster,store,roster)
 
     mcp_app=mcp.streamable_http_app()
-    app=Starlette(routes=[Route('/',index),Route('/health',health),Route('/api/state',snapshot),
+    app=Starlette(routes=[Route('/',home),Route('/classic',classic),Route('/api/ui',ui_state),Route('/api/desk-requests',desk_requests_route),Route('/health',health),Route('/api/state',snapshot),
                         Route('/api/board',board),Route('/api/task',task_route),Route('/api/attention',attention),
                         Route('/api/digest',digest),Route('/api/search',search),Route('/api/events',events_route),
                         Route('/api/lanes',lanes),Route('/v2',v2),
                         Route('/api/action',action,methods=['POST']),
                         Route('/api/projects',projects_list),Route('/api/projects/{slug}/connect',connect),
-                        Route('/projects',index),Route('/p/{slug}',index),Route('/p/{slug}/onboard',onboard),
+                        Route('/projects',home),Route('/p/{slug}',home),Route('/p/{slug}/onboard',onboard),
                         Route('/p/{slug}/rules',rules_page),Route('/p/{slug}/kit.zip',kit),Route('/p/{slug}/files/{name}',kit_file),
                         Route('/x/{crossover_id}',crossover_join),
                         Mount('/static',StaticFiles(directory=ROOT/'static')),Mount('/',mcp_app)],

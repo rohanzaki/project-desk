@@ -139,6 +139,20 @@ Agents propose improvements to the desk itself; nothing is built before the huma
 - Rules (AGENTS.md, rules.md): request instead of editing the desk; check the list and
   support an existing request; volunteer only for approved ones.
 
+### Found while building (00:10 PKT 27 Sep)
+- **Slim board for the hooks.** Every hook check-in pulled the full 1.2 MB board; with ~15
+  bound sessions they queued on the single desk process and timed out ("automatic
+  check-in unavailable"). New check_in section `hook_board`: returned under `board` with
+  only the fields `codex_hooks.collect` reads (task id/title/owner/pending/status/pause/
+  version/resources, next_step and summary cut to 300 chars; sessions; last 30 notes).
+  The hook switches to it right after the restart ships it (the file is live on disk, so
+  switching before would break against the old server).
+- **Default page switch.** `/` (and `/p/{slug}`, `/projects`) serve whichever page the
+  human picked: file `data/dashboard-default` = `v2` | `classic` (default classic).
+  `/classic` and `/v2` always serve their page. Action `ui.default {page}`; `GET /api/ui`.
+  The v2 nav has "Make this my default page". No restart needed to switch.
+- Attention gains `snoozed_total`; digest questions carry their first line.
+
 ## Page (static/v2)
 
 Stack: Preact + htm "standalone" ES module and IBM Plex fonts, both vendored under
