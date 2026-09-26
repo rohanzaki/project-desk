@@ -112,7 +112,9 @@ def compact(value, limit=360):
 # and crossover traffic keep their body (500 chars). Other broadcasts (deploy
 # starting/done, fyi, updates) arrive once as their first line, and afterwards
 # only as a count with ids until acknowledged.
-HOOK_SECTIONS = ['events', 'inbox', 'board']   # named: an agent's bare check_in is now the compact one
+# hook_board is the slim board (only the fields collect() reads; 269 KB on CMU vs 1.2 MB): the full board
+# from ~15 bound sessions queued the desk and timed check-ins out.
+HOOK_SECTIONS = ['events', 'inbox', 'hook_board']
 DECISION_DAYS = 2  # a session start re-shows the human's decisions this recent
 INBOX_PAGE = 100   # check_in's inbox page: fewer means nothing unread was left out
 IMPORTANT_KINDS = frozenset({'question', 'answer', 'handoff', 'decision', 'crossover'})
