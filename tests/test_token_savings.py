@@ -222,3 +222,12 @@ def test_a_bare_check_in_over_mcp_is_compact(tmp_path, monkeypatch):
         assert set(bare) == {'session_id', 'cursor', 'inbox_digest', 'counts', 'my_tasks', 'note'}
         named = call(client, {'session_key': a['session_key'], 'include': ['events', 'inbox', 'board']})
         assert {'board', 'events', 'inbox', 'latest_cursor'} <= set(named)
+
+
+def test_desk_restart_notices_arrive_whole_from_any_project(desk):
+    store, peer, tmp_path = desk
+    me, _ = bound(store, tmp_path)
+    store.message(peer['session_key'], 'all', 'PROJECT DESK RESTART in ~60 s (by x): reason\n' + 'detail ' * 30)
+    result = text(run(store, tmp_path))
+    assert 'UNACKNOWLEDGED MESSAGE' in result and 'detail detail' in result
+    assert 'UNACKNOWLEDGED BROADCAST ' not in result

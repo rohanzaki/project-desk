@@ -128,10 +128,16 @@ def first_line(body, limit=BROADCAST_CHARS):
     return compact(line if len(line) <= limit else line[:limit - 1] + '…', limit)
 
 
+# The desk's own restart notices: every session must see them whole, whichever
+# project they came from (a restart is announced to every board at once).
+DESK_NOTICE = re.compile(r'\s*PROJECT DESK (RESTART|IS BACK)\b')
+
+
 def important(message):
     # The inbox only holds mail for this session (or one it resumed) and broadcasts.
     return (message.get('recipient') not in ('all', 'claude', 'codex') or message.get('sender') == 'rohan'
-            or message.get('kind') in IMPORTANT_KINDS or bool(message.get('crossover_id')))
+            or message.get('kind') in IMPORTANT_KINDS or bool(message.get('crossover_id'))
+            or bool(DESK_NOTICE.match(str(message.get('body', '')))))
 
 
 def urgent(lines):

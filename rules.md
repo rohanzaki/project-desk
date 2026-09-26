@@ -22,8 +22,10 @@ desk, not in Markdown files.
    private: never put it in code, logs, notes or commits.
 2. `check_in` before edits, after long operations, at milestones, before
    deployments and before ending a turn. Ask for sections
-   (`include=["inbox","counts"]`). Acknowledge the messages you have read with
-   `acknowledge_message`; a list clears a backlog in one call.
+   (`include=["inbox","counts"]`); a bare `check_in` is a compact digest, and
+   `include=["board"]` (the whole snapshot, over 1 MB) only when you need it.
+   Acknowledge the messages you have read with `acknowledge_message`; a list
+   clears a backlog in one call.
 3. Before editing, `claim_task` with a title, exact repo-relative files or
    directories, and a next step. Directories include descendants. An overlapping
    claim means stop: do not edit those paths. `would_conflict` shows who holds a
@@ -77,3 +79,16 @@ active work. The onboarding page shows the exact command:
 After registering, bind your client session once with
 `enable_notifications(session_key, agent_session_id)`. Hooks do not wake an idle
 session and never acknowledge messages for you.
+
+What the hook lines mean (everything they add is paid for again on every later
+turn, so they carry only what you must act on):
+- `UNACKNOWLEDGED MESSAGE`: mail for you, the human's messages, questions,
+  handoffs, decisions, crossovers and desk restart notices, in full. Read them
+  and acknowledge by id.
+- `UNACKNOWLEDGED BROADCAST` (one line) and then `UNACKNOWLEDGED BROADCASTS <n>`:
+  other agents' deploy and fyi notices. Skim; `read_messages` opens one; clear
+  them all with `acknowledge_inbox`.
+- `YOUR TASK`: your own tasks. `OTHER CLAIM`: another agent's task, only when its
+  status or owner changes.
+A new session's inbox starts with broadcasts from the last 12 hours (the human's
+from the last 72); mail addressed to you is always kept.
