@@ -19,10 +19,12 @@ export function Claims() {
     : hit ? ['Held', ` by ${whoFor(b, hit.t.owner).name} through ${hit.p === cq ? 'the claim' : 'the claim'} ${hit.p} on ${hit.t.id} (${hit.t.title}). A claim here would be refused.`, 'held']
     : cq.startsWith('service:') && (b.shared_locks || []).some(l => l.resource === cq) ? ['Held', ' in another project. A claim here would be refused.', 'held']
     : ['Free', ' No open task in this project holds this path. A claim would succeed.', 'free'];
-  const services = new Map();
-  for (const s of b.prod || []) services.set(s.service, {service: s.service, prod: s});
-  for (const q of b.queues || []) { const e = services.get(q.resource) || {service: q.resource}; e.queue = q.queue; services.set(q.resource, e); }
-  for (const {p, t} of held) if (p.startsWith('service:')) { const e = services.get(p) || {service: p}; e.holder = t; services.set(p, e); }
+  // Deploy records name a service without the 'service:' prefix; claims and queues use it.
+  const services = new Map(), svc = name => 'service:' + String(name).replace(/^service:/, '');
+  const entry = name => { const k = svc(name); if (!services.has(k)) services.set(k, {service: k}); return services.get(k); };
+  for (const s of b.prod || []) entry(s.service).prod = s;
+  for (const q of b.queues || []) entry(q.resource).queue = q.queue;
+  for (const {p, t} of held) if (p.startsWith('service:')) entry(p).holder = t;
   const lanes = [...services.values()].sort((x, y) => (y.holder ? 1 : 0) - (x.holder ? 1 : 0) || x.service.localeCompare(y.service));
   return html`<section class="claims-layout">
     <div class="sec">
@@ -52,6 +54,14 @@ export function Claims() {
 }
 
 // ---- Agent lanes -------------------------------------------------------------------
+// Bars of one session that overlap in time share the track as two thin rows.
+function stack(bars) {
+  const sorted = bars.slice().sort((a, b) => String(a.start).localeCompare(String(b.start)));
+  const overlap = sorted.some((b, i) => i && String(b.start) < String(sorted[i - 1].end));
+  if (!overlap) return sorted.map(b => ({...b, row: null}));
+  const ends = ['', ''];
+  return sorted.map(b => { const row = String(b.start) >= ends[0] ? 0 : String(b.start) >= ends[1] ? 1 : (ends[0] <= ends[1] ? 0 : 1); ends[row] = String(b.end); return {...b, row}; });
+}
 export function Lanes() {
   const ctx = useContext(Desk);
   const [hours, setHours] = useState(12);
@@ -74,7 +84,7 @@ export function Lanes() {
       ${(data.sessions || []).map(s => { const w = whoFor(b, s.id, s); return html`
         <div class=${`lane-who${s.stale ? ' stale' : ''}`}><${Av} w=${w} /><div style=${{minWidth: 0}}><div class="nm" title=${s.name}>${s.name}</div><div class="br">${s.branch || ''}</div></div></div>
         <div class="lane-track">
-          ${(s.bars || []).map(x => { const l = pc(x.start), r = pc(x.end); return html`<div class=${`lane-bar lb-${x.kind} ${w.kind}`} title=${`${x.title} (${x.kind})`}
+          ${stack(s.bars || []).map(x => { const l = pc(x.start), r = pc(x.end); return html`<div class=${`lane-bar lb-${x.kind} ${w.kind}${x.row === null ? '' : ' r' + x.row}`} title=${`${x.title} (${x.kind})`}
             style=${{left: l, width: `calc(${r} - ${l})`}} onClick=${() => x.task_id && ctx.select(x.task_id, {open: true, view: 'tasks'})}>${x.title}</div>`; })}
           ${(s.marks || []).map(m => html`<span class=${`lane-mark lm-${m.kind}`} title=${`${hm(m.t)} ${m.text}`} style=${{left: pc(m.t)}}>${sym[m.kind] || '•'}</span>`)}
           <div class="lane-now" style=${{left: pc(data.end)}}></div>

@@ -187,7 +187,8 @@ select.input{max-width:220px;padding-right:6px}
 .sess{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--paper);text-align:left}
 .sess:hover{border-color:#9ba8c9}
 .sess.stale{background:var(--nav)}.sess.wait{border-color:var(--amber-line)}
-.sess .av{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:999px;color:#fff;font-size:9px;font-weight:700}
+.av{display:inline-grid;place-items:center;flex:none;border-radius:999px;color:#fff;font-weight:700;width:28px;height:28px;font-size:9px}
+.sess .av{width:28px;height:28px}
 .av.claude{background:var(--claude);box-shadow:0 0 0 3px var(--claude-soft)}.av.codex{background:var(--codex);box-shadow:0 0 0 3px var(--codex-soft)}.av.human{background:var(--human)}.av.none{background:var(--none)}
 .sess.stale .av{box-shadow:0 0 0 3px var(--hover)}
 .sess .txt{min-width:0;display:flex;flex-direction:column}
@@ -353,7 +354,8 @@ select.input{max-width:220px;padding-right:6px}
 .lane-who .nm{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lane-who .br{font-family:var(--mono);font-size:10px;color:var(--mute2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lane-track{position:relative;height:58px;border-bottom:1px solid var(--line3);background-image:linear-gradient(90deg,var(--hover) 1px,transparent 1px);background-size:25% 100%}
-.lane-bar{position:absolute;top:22px;height:24px;border:1px solid;border-radius:5px;display:flex;align-items:center;padding:0 8px;overflow:hidden;font-size:11px;font-weight:600;white-space:nowrap;cursor:pointer;min-width:4px}
+.lane-bar{position:absolute;top:22px;height:24px;border:1px solid;border-radius:5px;display:block;line-height:22px;padding:0 8px;overflow:hidden;text-overflow:ellipsis;font-size:11px;font-weight:600;white-space:nowrap;cursor:pointer;min-width:4px}
+.lane-bar.r0{top:20px;height:17px;line-height:15px;font-size:10px}.lane-bar.r1{top:39px;height:17px;line-height:15px;font-size:10px}
 .lb-run.claude{background:var(--claude-soft);border-color:var(--claude);color:var(--claude)}
 .lb-run.codex{background:var(--codex-soft);border-color:var(--codex);color:var(--codex)}
 .lb-run.none,.lb-run.human{background:var(--none-soft);border-color:var(--none);color:var(--none)}

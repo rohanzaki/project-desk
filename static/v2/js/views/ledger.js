@@ -50,7 +50,7 @@ export function Ledger({mode}) {
     ['Done', rest.filter(t => t.status === 'DONE')],
   ].filter(([, rows]) => rows.length);
   ctx.ui.visible = groups.flatMap(([, rows]) => rows);
-  const wide = ctx.mainWidth >= 760;
+  const wide = ctx.mainWidth >= 900;   // below this the title column gets squeezed to a few words
   const openN = pool.filter(t => t.status !== 'DONE').length, doneN = pool.filter(t => t.status === 'DONE').length;
   const doneTotal = b.tasks_done_total ?? null, doneShown = b.tasks_done_shown ?? doneN;
   const owners = [{v: 'all', l: 'All owners'}, {v: 'unassigned', l: 'Unassigned'},
