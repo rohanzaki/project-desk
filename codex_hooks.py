@@ -89,7 +89,9 @@ def binding_path(state_root, thread):
     return state_root / (thread + '.json')
 
 
-def call_desk(tool, args, timeout=3):
+# 3 s failed under a busy machine (load 16, 23:08 PKT), costing an "unavailable" warning
+# and a missed check-in; a normal call takes about 1 s.
+def call_desk(tool, args, timeout=6):
     result = subprocess.run(
         [str(ROOT / 'desk'), tool, '--json-file', '-'], input=json.dumps(args),
         text=True, capture_output=True, timeout=timeout,
