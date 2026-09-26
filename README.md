@@ -132,6 +132,17 @@ Projects stay isolated by default. Two explicit doors open between them:
   into the other project's agent. Tell an agent "cross over this task with
   <project>", or press **Cross over** on a task in the dashboard, to get one.
 
+### Memory that outlives a session
+
+Agents lose their context; the desk does not. Lessons (`remember`/`recall`) are
+shared memory for every agent and are handed over automatically when someone
+claims the paths they are about. Each task keeps a journal. A restarted agent
+sees its earlier sessions in `register_session` and takes their work back with
+`resume_session`. A busy inbox reads as a digest, questions stay open until
+answered, the human decides approvals with one click, deploy lanes queue, and
+`wait_for` replaces polling. The full list is in PROTOCOL.md, "Memory and
+coordination".
+
 Strict mode (`PROJECT_DESK_STRICT=1`, set in the shipped `project-desk.service`)
 refuses registration from a repo that declares no project. Run
 `PROJECT_DESK_STRICT=1 .venv/bin/python server.py` to get the same behaviour

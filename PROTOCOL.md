@@ -93,6 +93,57 @@ Isolation is the default; a crossover is the explicit exception.
 Data lives in side tables (`crossovers`, `crossover_members`, `message_links`);
 the original tables keep their shape, so older code still runs on the database.
 
+## Memory and coordination
+
+- **Lessons** (shared memory): `remember(body, paths, tags, scope)` saves a short
+  lesson; `claim_task`, `would_conflict`, `reopen_task` and `get_task_context`
+  return the lessons whose paths overlap yours, most specific first. `recall`
+  searches by words (every word, then any word), paths or tags. `scope="global"`
+  shares a lesson with every project. `forget` archives one with a reason. The
+  human adds or archives lessons on the dashboard's Lessons tab.
+- **Journal**: every claim, update, resume, reopen and human action appends to the
+  task's log; `log_progress` adds findings. `get_task_context` returns it, so a
+  resumed or future session can pick the work up.
+- **Resume**: `register_session` lists `resumable` earlier sessions of the same
+  agent kind in the same worktree that still own open tasks. `resume_session`
+  takes them over once that session has been silent 30+ minutes; its pending
+  handoffs, queue places, open questions and approvals follow, and messages
+  addressed to it reach the new inbox. The old identity is told.
+- **Inbox triage**: every new message gets a kind (explicit `kind`, or inferred from
+  a SHOUTED header like `DEPLOY DONE`). `check_in(include=["inbox_digest"])` lists
+  unread first lines, addressed-to-you first; `read_messages` opens some;
+  `acknowledge_inbox(kinds=[...])` clears broadcasts in one call (mail addressed to
+  you only with `include_direct=true`). `counts` splits direct and broadcast.
+- **Questions**: `ask` sends a question that stays open until the recipient replies
+  with `send_message(reply_to=<question id>)`; `check_in(include=["questions"])`.
+- **Approvals**: `request_approval(title, options, context)` puts a decision on the
+  dashboard; the human's click records a decision note and messages the requester.
+  Agents cannot decide approvals.
+- **wait_for(timeout, resources, crossover_id)** blocks (≤300 s) until a message to
+  you, an answer, a decision, a watched resource changing hands or a watched
+  crossover changing.
+- **Queue and deploys**: `queue_for(resource)` joins a FIFO queue for a held
+  resource; when it frees, the head gets YOUR TURN and 15 minutes to claim before
+  the next is told. `update_task(deployment="deployed", commit_ref=...)` on a task
+  holding `service:X` records the deploy; `record_deploy` does it explicitly;
+  `prod_state` reports the latest per service.
+- **Crossover contracts**: `crossover_contract(crossover_id, body)` publishes a
+  version (joined members only) and clears every sign-off; sign-offs record the
+  version they matched.
+- **Evidence**: `update_task` and `sign_off_crossover` take `evidence` checks
+  (`command`, `exit_code`, `tests_passed`, `tests_failed`, `commit`, `output`). The
+  board shows a task as *checked* or *failing* from them. The desk records what
+  agents report; it does not run the commands.
+- **Stale claims**: every ~10 minutes the desk messages the human once per episode
+  about open tasks whose owner has been silent `PROJECT_DESK_STALE_HOURS` (6) hours;
+  the dashboard lists them.
+- **Reopen**: `reopen_task(task_id, reason, next_step)` lets an agent take a
+  completed task in its project back, re-claiming its recorded paths atomically
+  (refused on overlap). The previous owner and the human are told. Moving an
+  OPEN task to another owner stays the human's call (Reassign) or a handoff.
+
+All of this lives in new tables; the original tables keep their shape.
+
 ## Claim semantics and practical limits
 
 Directories include descendants. Brackets in Next.js route names are literal.

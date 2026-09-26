@@ -252,3 +252,25 @@ footer{padding:18px clamp(18px,3.2vw,54px) 28px;font-size:10px;color:#6a7773}
 .crossover-closed{opacity:.6}
 .crossover-members{display:flex;flex-wrap:wrap;gap:.25rem .9rem;margin-top:.15rem}
 .crossover-link{margin-left:.4rem;padding:.1rem .5rem;font-size:.75rem}
+#approvals{margin:.5rem 0;padding:.6rem .8rem;border-radius:8px;background:#fff6e0;border:1px solid #e8c77a}
+#approvals h3{margin:0 0 .4rem;font-size:.95rem;color:#8c570c}
+.approval{padding:.4rem 0;border-top:1px solid #efdcaa}
+.approval p{margin:.25rem 0;white-space:pre-wrap;font-size:.85rem}
+.approval-options{display:flex;flex-wrap:wrap;gap:.4rem}
+#stale-claims,#prod-state{margin:.5rem 0;padding:.5rem .75rem;border-radius:8px;font-size:.82rem;color:#172b46}
+#stale-claims{background:#fdecea}
+#prod-state{background:#eef5f0}
+.stale-item,.prod-item{display:inline-block;margin:.1rem .8rem .1rem 0}
+.kind-badge{display:inline-block;margin:.2rem 0;padding:.05rem .45rem;border-radius:999px;font-size:.7rem;background:#e8eef9;color:#234675;text-transform:uppercase;letter-spacing:.03em}
+.kind-question,.kind-decision{background:#fff1d6;color:#8c570c}
+.kind-deploy{background:#eef5f0;color:#28704e}
+.evidence{margin-left:.35rem;padding:.05rem .45rem;border-radius:999px;font-size:.7rem;font-weight:600}
+.evidence-checked{background:#e3f1e8;color:#28704e}
+.evidence-failing{background:#fdecea;color:#a3261b}
+.journal{margin-top:.4rem;font-size:.8rem}
+.journal-entry{padding:.1rem 0;color:#172b46}
+.journal-entry span{font-weight:600;text-transform:uppercase;font-size:.68rem;color:#234675;margin-right:.3rem}
+.journal-entry time{color:#6b7a90;margin-left:.3rem}
+.lesson{padding:.5rem 0;border-bottom:1px solid #e3e8f0}
+.lesson p{margin:0 0 .2rem;white-space:pre-wrap}
+.lesson button{margin-top:.25rem;font-size:.75rem}

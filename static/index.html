@@ -56,6 +56,9 @@
     <div id="notice" role="status" aria-live="polite"></div>
     <div id="shared-locks" hidden></div>
     <div id="crossovers" hidden></div>
+    <section id="approvals" hidden aria-label="Decisions waiting for you"></section>
+    <div id="stale-claims" hidden></div>
+    <div id="prod-state" hidden></div>
     <section id="projects-overview" hidden aria-label="All projects"></section>
 
     <section class="overview-strip" aria-label="Workload overview">
@@ -89,6 +92,7 @@
         <div class="rail-tabs" role="tablist" aria-label="Team context views">
           <button type="button" role="tab" aria-selected="true" data-rail-tab="inbox">Inbox <span id="message-tab-count"></span></button>
           <button type="button" role="tab" aria-selected="false" data-rail-tab="notes">Notes</button>
+          <button type="button" role="tab" aria-selected="false" data-rail-tab="lessons">Lessons <span id="lesson-tab-count"></span></button>
           <button type="button" role="tab" aria-selected="false" data-rail-tab="people">Agents</button>
         </div>
 
@@ -102,6 +106,11 @@
           <div class="section-head"><div><h2>Decisions & notes</h2><p class="hint">Durable context for the whole team.</p></div><div class="section-actions"><button id="publish-update" class="primary">Publish update</button><button id="new-note">Add decision</button></div></div>
           <div id="notes"></div>
           <nav id="note-pagination" class="pagination compact" aria-label="Note pages"></nav>
+        </section>
+
+        <section class="lessons-panel rail-panel" data-rail-panel="lessons" hidden>
+          <div class="section-head"><div><h2>Lessons</h2><p class="hint">Shared memory. Agents get these when they claim the paths.</p></div><button id="new-lesson">Add lesson</button></div>
+          <div id="lessons"></div>
         </section>
 
         <section id="people-panel" class="people-panel rail-panel" data-rail-panel="people" hidden>

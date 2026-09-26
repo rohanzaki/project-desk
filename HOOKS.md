@@ -46,6 +46,11 @@ A message sent from another project (a crossover, or a direct cross-project
 crossover thread shows `task=crossover x-…`. Reply to the sender's session ID;
 acknowledge it as usual.
 
+Each line also carries the message kind when it is not a plain message, e.g.
+`UNACKNOWLEDGED MESSAGE m-… [deploy] from …` or `[question]`, so an agent can
+triage without reading every body. Answer a `[question]` with
+`send_message(reply_to=<its id>)`.
+
 ## What the hooks do
 
 `codex_hooks.py` supports both clients. It reads Project Desk at `SessionStart`,

@@ -43,7 +43,8 @@ const notificationKey=projectName=>`project-desk:last-seen:${projectName}`;
 const pinKey=projectName=>`project-desk:pinned-tasks:${projectName}`;
 const significantEvent=event=>event&&(
   event.kind.startsWith('task.')||event.kind.startsWith('handoff.')||event.kind==='message.sent'||
-  event.kind==='note.created'||event.kind==='changelog.published');
+  event.kind==='note.created'||event.kind==='changelog.published'||event.kind==='approval.requested'||
+  event.kind==='deploy.recorded');
 
 function maxEventSeq(){return Math.max(0,...(board?.events||[]).map(event=>Number(event.seq)||0));}
 
@@ -187,7 +188,44 @@ function renderCrossovers(){
   const dayAgo=Date.now()-864e5;
   const items=(board?.crossovers||[]).filter(item=>item.status!=='closed'||new Date(item.updated).getTime()>dayAgo);
   box.hidden=!items.length;
-  box.innerHTML=items.length?'<strong>Crossovers with other projects</strong>'+items.map(item=>`<div class="crossover crossover-${esc(item.status)}"><span class="crossover-status">${esc(item.status)}</span> <strong>${esc(item.title)}</strong> <span class="meta">${esc(item.id)}</span> <button type="button" class="crossover-link" data-crossover-link="${esc(item.id)}">Join link</button><div class="crossover-members">${item.members.map(member=>`<span class="crossover-member">${esc(member.project)}: ${member.task_id?`${esc(member.owner_name||shortId(member.owner))} · ${esc(shortId(member.task_id))} · ${esc(member.task_status||'')} · ${member.signed_off?'signed off':'awaiting sign-off'}`:'invited, not joined'}</span>`).join('')}</div></div>`).join(''):'';
+  box.innerHTML=items.length?'<strong>Crossovers with other projects</strong>'+items.map(item=>`<div class="crossover crossover-${esc(item.status)}"><span class="crossover-status">${esc(item.status)}</span> <strong>${esc(item.title)}</strong> <span class="meta">${esc(item.id)}${item.contract_version?` · contract v${esc(item.contract_version)}`:''}</span> <button type="button" class="crossover-link" data-crossover-link="${esc(item.id)}">Join link</button><div class="crossover-members">${item.members.map(member=>`<span class="crossover-member">${esc(member.project)}: ${member.task_id?`${esc(member.owner_name||shortId(member.owner))} · ${esc(shortId(member.task_id))} · ${esc(member.task_status||'')} · ${member.signed_off?'signed off':'awaiting sign-off'}`:'invited, not joined'}</span>`).join('')}</div></div>`).join(''):'';
+}
+function evidenceBadge(task){
+  const summary=(board.evidence||{})[task.id];
+  if(!summary)return '';
+  return `<span class="evidence evidence-${esc(summary.level)}" title="${esc(summary.checks)} structured check(s) reported by the agent">${summary.level==='checked'?'checked':'failing'}</span>`;
+}
+function journalHtml(task){
+  const entries=(board.task_logs||{})[task.id]||[];
+  if(!entries.length)return '';
+  return `<div class="journal"><span class="detail-label">Recent log</span>${entries.map(entry=>`<div class="journal-entry"><span>${esc(entry.kind)}</span> ${esc(entry.entry.slice(0,220))} <time>${time(entry.created)}</time></div>`).join('')}</div>`;
+}
+function renderApprovals(){
+  const box=$('#approvals');
+  if(onOverview()){box.hidden=true;return;}
+  const pending=(board.approvals||[]).filter(item=>item.status==='pending');
+  box.hidden=!pending.length;
+  box.innerHTML=pending.length?'<h3>Decisions waiting for you</h3>'+pending.map(item=>`<article class="approval" data-approval="${esc(item.id)}"><div><strong>${esc(item.title)}</strong> <span class="meta">${esc(item.requester_name)} · ${time(item.created)}</span></div><p>${esc(item.context)}</p><div class="approval-options">${item.options.map(option=>`<button type="button" data-decision="${esc(option)}">${esc(option)}</button>`).join('')}<button type="button" data-decision="" class="approval-other">Other…</button></div></article>`).join(''):'';
+}
+function renderStale(){
+  const box=$('#stale-claims');
+  if(onOverview()){box.hidden=true;return;}
+  const stale=board.stale_claims||[];
+  box.hidden=!stale.length;
+  box.innerHTML=stale.length?`<strong>Stale claims</strong> · owner silent 6h+ (use Reassign or Close on the task, or let the owner resume): `+stale.map(item=>`<span class="stale-item">${esc(shortId(item.task_id))} ${esc(item.title.slice(0,70))} · ${esc(item.owner_name.slice(0,40))} since ${time(item.owner_last_seen)}</span>`).join(''):'';
+}
+function renderProd(){
+  const box=$('#prod-state');
+  if(onOverview()){box.hidden=true;return;}
+  const prod=board.prod||[],queues=(board.queues||[]).filter(item=>item.queue.length);
+  box.hidden=!prod.length&&!queues.length;
+  box.innerHTML=(prod.length?'<strong>On prod</strong> '+prod.map(item=>`<span class="prod-item">${esc(item.service)} ${esc(String(item.commit_ref).slice(0,12))} · ${esc(item.by)} · ${time(item.created)}</span>`).join(''):'')+
+    (queues.length?'<div><strong>Queues</strong> '+queues.map(item=>`<span class="prod-item">${esc(item.resource)}: ${item.queue.map(entry=>esc(entry.name)).join(' → ')}</span>`).join('')+'</div>':'');
+}
+function renderLessons(){
+  const lessons=board.lessons||[];
+  $('#lesson-tab-count').textContent=lessons.length||'';
+  $('#lessons').innerHTML=lessons.length?lessons.map(item=>`<article class="lesson" data-lesson="${esc(item.id)}"><p>${esc(item.body)}</p><div class="meta">${esc(item.author_name)} · ${esc(item.scope)}${item.paths.length?' · '+item.paths.map(esc).join(', '):''}${item.tags.length?' · #'+item.tags.map(esc).join(' #'):''}</div><button type="button" data-archive-lesson="${esc(item.id)}">Archive</button></article>`).join(''):'<p class="empty">No lessons yet. Agents add them with remember; add one here too.</p>';
 }
 function renderSharedLocks(){
   const box=$('#shared-locks');
@@ -303,6 +341,7 @@ function messageCard(message,compact=false){
     <div class="message-route"><div>${agentChip(message.sender)}<span class="route-arrow">to</span>${agentChip(message.recipient,'agent-recipient')}</div><time>${time(message.created)}</time></div>
     <div class="meta message-direction">${esc(senderLabel(message))} to ${esc(recipientLabel(message.recipient))}${message.crossover_id?` · crossover ${esc(message.crossover_id)}`:''}</div>
     ${task?`<div class="message-task">Task: <strong>${esc(task.title)}</strong> <span>${esc(shortId(task.id))}</span></div>`:''}
+    ${message.kind&&message.kind!=='message'?`<span class="kind-badge kind-${esc(message.kind)}">${esc(message.kind)}${message.question_status?` · ${esc(message.question_status)}`:''}</span>`:''}
     <p>${esc(message.body)}</p>
     ${messageReceipt(message)}
     <div class="message-actions"><button type="button" data-reply="${esc(message.id)}">Reply</button>${!compact&&['rohan','all'].includes(message.recipient)&&!(message.acknowledgments||[]).some(item=>item.session_id==='rohan')?`<button type="button" data-ack="${esc(message.id)}">Acknowledge</button>`:''}</div>
@@ -339,7 +378,7 @@ function taskCard(task,expanded=false){
     <div class="task-row task-top">
       <button type="button" class="pin-button" data-pin="${esc(task.id)}" aria-pressed="${isPinned}" aria-label="${isPinned?'Unpin':'Pin'} ${esc(task.title)}" title="${isPinned?'Unpin task':'Pin task to top'}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 3 8 0-1 6 3 3v2H6v-2l3-3-1-6Zm4 11v7"/></svg></button>
       <div class="task-main"><h3>${esc(task.title)}</h3><div class="task-owner">${agentChip(owner)}<strong class="owner-name">${esc(name(owner))}</strong><span class="meta">Updated ${time(task.updated)}</span></div></div>
-      <div class="task-state"><span class="badge ${task.status.toLowerCase()}">${task.status}</span>${task.priority!=='normal'?`<span class="priority">${esc(task.priority)}</span>`:''}</div>
+      <div class="task-state"><span class="badge ${task.status.toLowerCase()}">${task.status}</span>${evidenceBadge(task)}${task.priority!=='normal'?`<span class="priority">${esc(task.priority)}</span>`:''}</div>
       <p class="task-next"><span>${task.status==='DONE'?'Outcome':'Next'}</span>${esc(task.status==='DONE'?(task.summary||'No completion summary recorded'):(task.next_step||'No next step recorded'))}</p>
     </div>
     <details class="task-body"${expanded?' open':''}>
@@ -349,6 +388,7 @@ function taskCard(task,expanded=false){
         <div><span class="detail-label">Evidence</span><pre>${esc('Task: '+task.id+'\nValidation: '+(task.validation||'Not recorded')+'\nCommit: '+(task.commit_ref||'Not recorded')+'\nDeployment: '+task.deployment+'\nWorktree: '+(board.sessions.find(session=>session.id===task.owner)?.worktree||'Not claimed')+'\nBranch: '+(board.sessions.find(session=>session.id===task.owner)?.branch||'Not claimed'))}</pre></div>
       </div>
       ${task.imported?`<div class="imported">${task.status==='DONE'?'Imported completion report':'Imported report — ownership needs confirmation'}</div>`:''}
+      ${journalHtml(task)}
       ${crossoverFor(task.id)?`<div class="imported">In crossover ${esc(crossoverFor(task.id).id)} with ${esc(crossoverFor(task.id).members.filter(member=>member.task_id!==task.id).map(member=>member.project).join(', ')||'nobody yet')} · ${esc(crossoverFor(task.id).status)}</div>`:''}
       ${task.pending_owner?`<div class="imported">Handoff offered to ${esc(name(task.pending_owner))}; awaiting acceptance</div>`:''}
       ${handoffBrief(task)}
@@ -442,6 +482,10 @@ function renderEvents(){
 function render(){
   renderSharedLocks();
   renderCrossovers();
+  renderApprovals();
+  renderStale();
+  renderProd();
+  renderLessons();
   updateOwnerFilter();
   renderMetrics();
   renderTasks();
@@ -454,7 +498,7 @@ function composeMessage(taskId='',recipient='all',replyTo=''){
   const context=task?`<p class="dialog-context">Task: <strong>${esc(task.title)}</strong> <span>${esc(shortId(task.id))}</span></p>`:'';
   const title=replyTo?'Reply in team inbox':task?'Comment on task':'Write to the team';
   const foreign=original?.from_project?`${original.from_name||original.sender} · project ${original.from_project}`:'';
-  openEditor(title,context+field('Recipient','recipient','select',recipient,recipientOptions(recipient,original?.sender,foreign))+field('Message','body','textarea'),data=>mutate('message',{recipient:data.recipient,body:data.body,...(taskId?{task_id:taskId}:{})}));
+  openEditor(title,context+field('Recipient','recipient','select',recipient,recipientOptions(recipient,original?.sender,foreign))+field('Message','body','textarea'),data=>mutate('message',{recipient:data.recipient,body:data.body,...(taskId?{task_id:taskId}:{}),...(replyTo?{reply_to:replyTo}:{})}));
 }
 
 $('#editor-form').addEventListener('submit',async event=>{
@@ -523,6 +567,23 @@ $('#tasks').addEventListener('click',event=>{
   }else if(action==='close')openEditor('Close task and release its claims',field('Outcome or cancellation reason','summary','textarea'),data=>mutate(action,{...base,...data}));
   else openEditor(action==='pause'?'Pause this task':'Resume this task',`<p>${esc(task.title)}</p><p>${action==='pause'?'Claims stay reserved. The agent must check in to see your pause.':'This releases your pause instruction; it does not start an agent automatically.'}</p>`,()=>mutate(action,base));
 });
+
+$('#approvals').addEventListener('click',event=>{
+  const button=event.target.closest('[data-decision]');
+  if(!button)return;
+  const approval=button.closest('[data-approval]').dataset.approval,decision=button.dataset.decision;
+  if(decision){mutate('approval.decide',{approval_id:approval,decision}).then(refresh).catch(error=>{$('#notice').textContent=error.message;});return;}
+  openEditor('Another answer',field('Your decision','decision')+field('Note for the agent','note','textarea'),data=>mutate('approval.decide',{approval_id:approval,decision:data.decision,note:data.note}),'Send decision');
+});
+$('#lessons').addEventListener('click',event=>{
+  const button=event.target.closest('[data-archive-lesson]');
+  if(!button)return;
+  openEditor('Archive lesson',field('Why it no longer applies','reason','textarea'),data=>mutate('lesson.archive',{lesson_id:button.dataset.archiveLesson,reason:data.reason}),'Archive');
+});
+$('#new-lesson').addEventListener('click',()=>openEditor('Add a lesson for every agent',
+  field('Lesson (a few sentences, with the why)','body','textarea')+field('Paths it applies to (one per line, optional)','paths','textarea','',[],false)+
+  field('Tags (comma separated, optional)','tags','text','',[],false)+field('Scope','scope','select','project',[{value:'project',label:'This project'},{value:'global',label:'Every project'}]),
+  data=>mutate('lesson.create',data),'Save lesson'));
 
 $('#crossovers').addEventListener('click',event=>{
   const button=event.target.closest('[data-crossover-link]');

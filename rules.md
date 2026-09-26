@@ -41,7 +41,17 @@ desk, not in Markdown files.
    receiver calls `accept_handoff`. Silence and stale presence are not consent.
    Never act as another session or use the dashboard's human-only controls.
 7. Respect the human's pauses. Only the human can lift a dashboard pause.
-8. Work that spans two projects (an API one repo serves and another calls) is a
+8. Memory: `claim_task` and `would_conflict` hand you the lessons for your paths;
+   read them. `remember` a short lesson (with paths and the why) when you learn a
+   trap the code does not show; `recall` searches them. On long tasks,
+   `log_progress` what you found. After a restart, `register_session` lists your
+   earlier sessions; `resume_session` takes their open tasks back.
+9. Busy inbox: `check_in(include=["inbox_digest"])`, `read_messages`, and
+   `acknowledge_inbox` for broadcasts. `ask` when you need an answer (reply with
+   `send_message(reply_to=...)`), `request_approval` for the human's decision,
+   `queue_for` a busy deploy lane, `wait_for` instead of polling. Report checks as
+   `evidence` on `update_task`. `reopen_task` takes back a completed task you need.
+10. Work that spans two projects (an API one repo serves and another calls) is a
    crossover. The owner of the task calls `start_crossover` to invite the other
    project or its session; the invitee calls `join_crossover` with paths in its
    own repo, which claims a task on its own side. `send_message` to the crossover

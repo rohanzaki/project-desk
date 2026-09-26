@@ -10,59 +10,11 @@ from pathlib import Path
 from uuid import uuid4
 
 from projects import DECLARATION, DEFAULT_DESK, display_name, resolve_project, valid_slug
+from deskcore import Conflict, HUMAN, ident, now, overlaps, scopes, text  # noqa: F401  (re-exported)
+from desk_features import FeaturesMixin, MESSAGE_KINDS, infer_kind
 
 
-class Conflict(ValueError):
-    pass
-
-
-def now():
-    return datetime.now(timezone.utc).isoformat()
-
-
-def ident(prefix):
-    return prefix + uuid4().hex[:12]
-
-
-def text(value, label, limit=12000):
-    if not isinstance(value, str) or not value.strip() or len(value) > limit:
-        raise ValueError(f'{label} must contain 1–{limit} characters')
-    return value.strip()
-
-
-def scopes(values):
-    if not isinstance(values, list) or not values or len(values) > 100:
-        raise ValueError('Supply 1–100 relative file/directory paths or service:name resources')
-    result = []
-    for value in values:
-        value = text(value, 'resource', 500).replace('\\', '/')
-        if value.startswith('service:'):
-            if not re.fullmatch(r'service:[a-zA-Z0-9_.:-]+', value):
-                raise ValueError('Invalid service resource')
-        else:
-            if value.startswith('/') or ':' in value or any(c in value for c in '*?'):
-                raise ValueError('Use literal repo-relative paths, not absolute paths or globs')
-            parts = value.split('/')
-            if '..' in parts:
-                raise ValueError('Parent traversal is not a valid resource')
-            value = '/'.join(p for p in parts if p and p != '.') or '.'
-        result.append(value)
-    return sorted(set(result))
-
-
-def overlaps(a, b):
-    if a.startswith('service:') or b.startswith('service:'):
-        return a == b
-    return a == '.' or b == '.' or a == b or a.startswith(b + '/') or b.startswith(a + '/')
-
-
-# The human owner's identity on the board. 'rohan' is the id this project
-# originally shipped with; it stays as the stored value so existing messages and
-# receipts keep resolving. Clients should send 'human', which is aliased to it.
-HUMAN = 'rohan'
-
-
-class Store:
+class Store(FeaturesMixin):
     CONTEXT_COMMENT_LIMIT = 50
     CONTEXT_HANDOFF_LIMIT = 20
     SNAPSHOT_HANDOFF_LIMIT = 100
@@ -73,7 +25,8 @@ class Store:
     # new. On a busy project it reached ~695KB and overran the caller's context
     # twice in one night, so the message the agent needed could not be read at
     # all. An agent should ask for sections instead: ['inbox','conflicts'].
-    SECTIONS = ('events', 'inbox', 'board', 'my_tasks', 'counts', 'crossovers')
+    SECTIONS = ('events', 'inbox', 'board', 'my_tasks', 'counts', 'crossovers',
+                'inbox_digest', 'questions', 'approvals', 'queues')
     # What a caller that passes no `include` has always received.
     LEGACY_SECTIONS = ('events', 'inbox', 'board')
     # Long prose fields are kept whole in the inbox (the body IS the point) but
@@ -150,6 +103,7 @@ class Store:
                     PRIMARY KEY(crossover_id, project), FOREIGN KEY(crossover_id) REFERENCES crossovers(id));
                 CREATE INDEX IF NOT EXISTS crossover_members_task ON crossover_members(task_id);
             ''')
+            self._migrate_features(c)
             self._sync_registry(c)
         self.path.chmod(0o600)
 
@@ -417,8 +371,13 @@ class Store:
                       (sid, hashlib.sha256(key.encode()).hexdigest(), text(name,'name',120), kind,
                        project, text(branch,'branch',250), text(worktree,'worktree',1000), now()))
             self.event(c, project, sid, 'session.registered', {'name': name, 'kind': kind})
+            resumable = self._resumable(c, {'id': sid, 'project': project, 'kind': kind, 'worktree': worktree})
         result = {'session_id': sid, 'session_key': key, 'project': project,
                   'instruction': 'Keep the key private for this session; use check_in before edits and at milestones.'}
+        if resumable:
+            result['resumable'] = resumable
+            result['resume_hint'] = ('Earlier sessions of this agent in this worktree still own open tasks. If one '
+                                     'was you before a restart, call resume_session(session_key, from_session).')
         if hint:
             result['hint'] = hint
         return result
@@ -483,7 +442,12 @@ class Store:
                 task_id = self._insert_task(c, s, title, resources, next_step)
             self.claim_resources(c, s['project'], task_id, resources)
             self.event(c,s['project'],s['id'],'task.claimed', {'task_id': task_id, 'resources':resources})
-            return self.task(c, task_id)
+            self._log(c, task_id, s['project'], s['id'], 'claimed', f"Claimed by {s['name']}: {', '.join(resources)}")
+            self._drop_from_queues(c, s['id'], resources)
+            self._notify_queues(c)
+            result = self.task(c, task_id)
+            result['lessons'] = self._lessons_for_paths(c, s['project'], resources)
+            return result
 
     def _insert_task(self, c, s, title, resources, next_step):
         task_id = ident('t-')
@@ -494,7 +458,8 @@ class Store:
         return task_id
 
     def update(self, key, task_id, version, status, next_step, summary='', validation='', commit_ref='',
-               deployment='not_deployed', resources=None):
+               deployment='not_deployed', resources=None, evidence=None):
+        evidence = self._evidence_items(evidence)
         if status not in ('RUNNING','BLOCKED','PAUSED','DONE'):
             raise ValueError('Invalid task status')
         if deployment not in ('not_deployed','not_applicable','deployed','failed'):
@@ -529,6 +494,14 @@ class Store:
                       (status,next_step,summary,validation,commit_ref,deployment,json.dumps(new_resources),now(),task_id))
             self.event(c,s['project'],s['id'],'task.updated',
                        {'task_id':task_id,'status':status,'summary':summary,'validation':validation,'next_step':next_step})
+            self._log(c, task_id, s['project'], s['id'], status.lower(),
+                      f'{status}: ' + (summary if status == 'DONE' else next_step))
+            if evidence:
+                self._store_evidence(c, task_id, s['project'], s['id'], 'task', evidence)
+            if deployment == 'deployed' and commit_ref and (t['deployment'] != 'deployed' or t['commit_ref'] != commit_ref):
+                for service in [r for r in t['resources'] if r.startswith('service:')]:
+                    self._record_deploy(c, s['project'], s['id'], service, commit_ref, summary or next_step, task_id)
+            self._notify_queues(c)
             if crossover_id:
                 self._crossover_notice(c, crossover_id, s,
                     f"{s['project']} finished its side of crossover {crossover_id} ({task_id}): {summary}\n"
@@ -682,22 +655,25 @@ class Store:
             crossover_id = self._crossover_of_task(c, task_id)
             return {'project':t['project'], 'task':t, 'comments':self._decorate(c, comments),
                     'crossovers':[self._crossover_view(c, crossover_id)] if crossover_id else [],
+                    'journal':self._journal(c, task_id),
+                    'evidence':self._evidence_list(c, task_id),
+                    'lessons':self._lessons_for_paths(c, t['project'], t['resources']),
                     'comment_limit':self.CONTEXT_COMMENT_LIMIT,
                     'handoff_briefs':handoffs,
                     'handoff_limit':self.CONTEXT_HANDOFF_LIMIT,
                     'latest_handoff':handoffs[0] if handoffs else None}
 
     def recipient_matches(self, s, recipient):
-        return recipient in ('all', s['kind'], s['id'])
+        return recipient in ('all', s['kind'], s['id']) or recipient in s.get('aliases', ())
 
-    def message(self, key, recipient, body, task_id=None):
+    def message(self, key, recipient, body, task_id=None, kind=None, reply_to=None):
         with self.connection(True) as c:
             s=self.auth(c,key)
             if isinstance(recipient,str) and recipient.startswith('x-'):
                 if task_id:
                     raise ValueError('A crossover message goes to every member; it takes no task_id')
                 return self._crossover_message(c,s['project'],s['id'],recipient,body)
-            return self._message(c,s['project'],s['id'],recipient,body,task_id)
+            return self._message(c,s['project'],s['id'],recipient,body,task_id,kind=kind,reply_to=reply_to)
 
     def _open_project(self, c, slug):
         row = c.execute('SELECT archived FROM projects WHERE slug=?', (slug,)).fetchone()
@@ -734,7 +710,7 @@ class Store:
             return row['project'], recipient
         raise ValueError('Unknown recipient in this project (or any other)')
 
-    def _message(self,c,project,sender,recipient,body,task_id=None,crossover_id=None):
+    def _message(self,c,project,sender,recipient,body,task_id=None,crossover_id=None,kind=None,reply_to=None):
         # 'human' is the name to use; 'rohan' is the original id this project
         # shipped with and is kept as an alias so existing rows and any client
         # still sending it keep working. Renaming the stored id would be a data
@@ -749,11 +725,19 @@ class Store:
             # stored in; across projects, only a task the two share a crossover on.
             if task['project'] != target or (cross and not self._shares_crossover(c, project, task_id)):
                 raise ValueError('Task belongs to another project')
+        if kind is not None and kind not in MESSAGE_KINDS:
+            raise ValueError(f"Unknown message kind {kind}; kinds: {', '.join(MESSAGE_KINDS)}")
+        body=text(body,'message')
         mid=ident('m-')
         c.execute('INSERT INTO messages(id,project,sender,recipient,body,task_id,created) VALUES(?,?,?,?,?,?,?)',
-                  (mid,target,sender,recipient,text(body,'message'),task_id,now()))
+                  (mid,target,sender,recipient,body,task_id,now()))
         if cross or crossover_id:
             c.execute('INSERT INTO message_links VALUES(?,?,?)', (mid, project, crossover_id))
+        if reply_to:
+            self._answer(c, project, sender, reply_to, mid)
+            kind = kind or ('answer' if c.execute("SELECT 1 FROM questions WHERE message_id=? AND answer_message_id=?",
+                                                  (reply_to, mid)).fetchone() else None)
+        c.execute('INSERT INTO message_meta VALUES(?,?,?)', (mid, kind or infer_kind(body), reply_to))
         data = {'message_id':mid,'recipient':recipient}
         if cross:
             data['from_project'] = project
@@ -776,9 +760,19 @@ class Store:
         ids = [m['id'] for m in messages]
         if not ids:
             return messages
+        marks = ','.join('?' * len(ids))
         links = {r['message_id']: r for r in c.execute(
-            f"SELECT * FROM message_links WHERE message_id IN ({','.join('?' * len(ids))})", ids)}
+            f"SELECT * FROM message_links WHERE message_id IN ({marks})", ids)}
+        meta = {r['message_id']: r for r in c.execute(f"SELECT * FROM message_meta WHERE message_id IN ({marks})", ids)}
+        asked = {r['message_id']: r['status'] for r in c.execute(
+            f"SELECT message_id,status FROM questions WHERE message_id IN ({marks})", ids)}
         for m in messages:
+            if m['id'] in meta:
+                m['kind'] = meta[m['id']]['kind']
+                if meta[m['id']]['reply_to']:
+                    m['reply_to'] = meta[m['id']]['reply_to']
+            if m['id'] in asked:
+                m['question_status'] = asked[m['id']]
             link = links.get(m['id'])
             if not link:
                 continue
@@ -814,6 +808,7 @@ class Store:
             raise ValueError('Provide message_id (one) or message_ids (several)')
         with self.connection(True) as c:
             s=self.auth(c,key)
+            s['aliases']=self._aliases(c,s['id'])
             if message_ids is None:
                 return self._acknowledge(c,s,message_id)
             if isinstance(message_ids,str):
@@ -898,7 +893,11 @@ class Store:
                                  'task_id': task['id'], 'title': task['title'],
                                  'owner': task['owner'], 'status': task['status'],
                                  'human_paused': task['human_paused']})
-            return {'resources': resources, 'clear': not blockers, 'blockers': blockers}
+            clean = scopes(resources)
+            queues = {r: self._queue_view(c, r, s['project']) for r in clean
+                      if c.execute('SELECT 1 FROM resource_queue WHERE resource=?', (r,)).fetchone()}
+            return {'resources': resources, 'clear': not blockers, 'blockers': blockers,
+                    'lessons': self._lessons_for_paths(c, s['project'], clean), **({'queues': queues} if queues else {})}
 
     def _digest(self, row):
         """Shorten a task's long prose, leaving proof of what was cut.
@@ -952,13 +951,14 @@ class Store:
             out={'session_id':s['id'],'cursor':events[-1]['seq'] if events else since}
             if wants('events'):
                 out['events']=events
+            # This session plus any earlier session it resumed: their mail is its mail.
+            ids=self._aliases(c,s['id'])
             if wants('inbox'):
                 # Bodies stay whole here: an unread message you cannot read is
                 # the bug this whole parameter exists to fix.
-                out['inbox']=self._decorate(c,[dict(r) for r in c.execute('''SELECT m.* FROM messages m WHERE project=?
-                    AND recipient IN ('all',?,?) AND sender!=? AND NOT EXISTS
-                    (SELECT 1 FROM receipts r WHERE r.message_id=m.id AND r.session_id=?) ORDER BY created LIMIT 100''',
-                    (s['project'],s['kind'],s['id'],s['id'],s['id']))])
+                out['inbox']=self._decorate(c,self._unread_rows(c,s,ids,100))
+            if wants('inbox_digest'):
+                out['inbox_digest']=self._inbox_digest(c,s,ids,self._unread_rows(c,s,ids,200))
             mine=None
             if wants('my_tasks') or wants('counts'):
                 mine=[self.task(c,r['id']) for r in c.execute(
@@ -966,16 +966,30 @@ class Store:
             if wants('my_tasks'):
                 out['my_tasks']=[self._digest(t) for t in mine]
             if wants('counts'):
-                unread=c.execute('''SELECT COUNT(*) FROM messages m WHERE project=?
-                    AND recipient IN ('all',?,?) AND sender!=? AND NOT EXISTS
-                    (SELECT 1 FROM receipts r WHERE r.message_id=m.id AND r.session_id=?)''',
-                    (s['project'],s['kind'],s['id'],s['id'],s['id'])).fetchone()[0]
-                out['counts']={'unread_messages':unread,'my_tasks':len(mine),
+                pending=self._unread_rows(c,s,ids,100000)
+                unread=len(pending)
+                direct=sum(1 for m in pending if m['recipient'] in ids)
+                marks=','.join('?'*len(ids))
+                out['counts']={'unread_messages':unread,'unread_direct':direct,'unread_broadcast':unread-direct,
+                               'open_questions_for_me':len(self._questions(c,s,ids)['for_me']),
+                               'my_pending_approvals':c.execute(f"SELECT COUNT(*) FROM approvals WHERE status='pending' AND requester IN ({marks})",ids).fetchone()[0],
+                               'my_tasks':len(mine),
                                'my_open_tasks':sum(1 for t in mine if t['status'] not in ('DONE','CANCELLED')),
                                'project_tasks':c.execute('SELECT COUNT(*) FROM tasks WHERE project=?',(s['project'],)).fetchone()[0],
                                'sessions':c.execute('SELECT COUNT(*) FROM sessions WHERE project=?',(s['project'],)).fetchone()[0]}
             if wants('crossovers'):
                 out['crossovers']=self._crossovers_for(c,s['project'])
+            if wants('questions'):
+                out['questions']=self._questions(c,s,ids)
+            if wants('approvals'):
+                marks=','.join('?'*len(ids))
+                out['approvals']=[self._approval_row(c,r[0]) for r in c.execute(
+                    f'SELECT id FROM approvals WHERE requester IN ({marks}) ORDER BY created DESC LIMIT 20',ids)]
+            if wants('queues'):
+                marks=','.join('?'*len(ids))
+                out['queues']=[{'resource':r['resource'],'queue':self._queue_view(c,r['resource'],s['project']),
+                                'held_by':self._holders(c,s['project'],r['resource'],exclude_owner=s['id'])}
+                               for r in c.execute(f'SELECT DISTINCT resource FROM resource_queue WHERE session_id IN ({marks})',ids)]
             if wants('board'):
                 out['board']=self._snapshot(c,s['project'])
             return out
@@ -1002,6 +1016,21 @@ class Store:
                                 for r in c.execute("SELECT * FROM claims WHERE resource LIKE 'service:%' AND project!=?",(project,))],
                 'crossovers':self._crossovers_for(c,project,include_closed=True),
                 'outgoing_messages':outgoing,
+                'lessons':[{**l,'body':l['body'][:400]} for l in
+                           (self._lesson_row(c,r,compact=True) for r in c.execute(
+                               'SELECT * FROM lessons WHERE archived=0 AND project IN (?,?) ORDER BY updated DESC LIMIT 40',
+                               (project,'*')))],
+                'approvals':[self._approval_row(c,r[0]) for r in c.execute(
+                    "SELECT id FROM approvals WHERE project=? AND (status='pending' OR decided>?) ORDER BY created DESC LIMIT 30",
+                    (project,(datetime.now(timezone.utc)-timedelta(days=3)).isoformat()))],
+                'open_questions':[{'message_id':r['message_id'],'asker':r['asker'],'recipient':r['recipient'],'created':r['created']}
+                                  for r in c.execute("SELECT * FROM questions WHERE project=? AND status='open' ORDER BY created DESC LIMIT 50",(project,))],
+                'queues':[{'resource':r['resource'],'queue':self._queue_view(c,r['resource'],project)} for r in c.execute(
+                    "SELECT DISTINCT resource FROM resource_queue WHERE project=? OR resource LIKE 'service:%'",(project,))],
+                'prod':self._prod(c)['services'],
+                'stale_claims':self._stale(c,project),
+                'task_logs':{tid:self._journal(c,tid,3) for tid in [t['id'] for t in tasks if t['status']!='DONE'][:100]},
+                'evidence':self._evidence_summary(c,[t['id'] for t in tasks]),
                 'generated_at':now()}
 
     def snapshot(self,project):
@@ -1019,13 +1048,24 @@ class Store:
                      text(data['next_step'],'next step'),now()))
                 self.event(c,project,'rohan','task.queued',{'task_id':tid})
                 return self.task(c,tid)
+            if action=='approval.decide':
+                return self._decide_approval(c,project,data)
+            if action=='lesson.create':
+                paths=data.get('paths') or []
+                if isinstance(paths,str): paths=[p.strip() for p in paths.splitlines() if p.strip()]
+                tags=data.get('tags') or []
+                if isinstance(tags,str): tags=[t.strip() for t in re.split(r'[,\s]+',tags) if t.strip()]
+                return self._remember(c,project,HUMAN,data.get('body',''),paths,tags,data.get('scope') or 'project')
+            if action=='lesson.archive':
+                return self._forget(c,project,HUMAN,data.get('lesson_id',''),data.get('reason','') or 'Archived by the human')
             if action=='crossover.start':
                 return self._start_crossover(c,project,HUMAN,'Human',self.task(c,data['task_id']),
                                              data.get('invite',[]),data.get('note',''))
             if action=='message':
                 if str(data['recipient']).startswith('x-'):
                     return self._crossover_message(c,project,'rohan',data['recipient'],data['body'])
-                return self._message(c,project,'rohan',data['recipient'],data['body'],data.get('task_id'))
+                return self._message(c,project,'rohan',data['recipient'],data['body'],data.get('task_id'),
+                                     reply_to=data.get('reply_to'))
             if action=='note': return self._note(c,project,'rohan',data['body'],'decision')
             if action=='publish_update':
                 return self._publish_update(c,project,'rohan',data['title'],data['body'],
@@ -1055,6 +1095,8 @@ class Store:
                 c.execute('UPDATE tasks SET version=version+1,updated=? WHERE id=?',(now(),t['id']))
                 self.event(c,project,'rohan','task.reopened',{
                     'task_id':t['id'],'session_id':target['id'],'next_step':next_step})
+                self._log(c,t['id'],project,HUMAN,'reopened',f"Reopened by the human for {target['name']}: {next_step}")
+                self._notify_queues(c)
                 return self.task(c,t['id'])
             if t['status']=='DONE': raise Conflict('Completed task; use Reopen & reassign')
             if action=='pause':
@@ -1082,6 +1124,9 @@ class Store:
             else: raise ValueError('Unknown action')
             c.execute('UPDATE tasks SET version=version+1,updated=? WHERE id=?',(now(),t['id']))
             self.event(c,project,'rohan','task.'+action,data)
+            detail={'close':data.get('summary',''),'reassign':data.get('reason',''),'priority':data.get('priority','')}.get(action,'')
+            self._log(c,t['id'],project,HUMAN,action,f'Human: {action}'+(f' — {detail}' if detail else ''))
+            self._notify_queues(c)
             return self.task(c,t['id'])
 
     # ---- Crossover: two projects working one piece of work ----------------
@@ -1127,7 +1172,7 @@ class Store:
             item = {'project': m['project'], 'role': 'origin' if m['project'] == x['origin_project'] else 'member',
                     'task_id': m['task_id'], 'invited': m['invited'], 'invited_by': m['invited_by'],
                     'joined': m['joined'], 'signed_off': m['signed'] is not None, 'signoff': m['signoff'],
-                    'signed_by': m['signed_by'], 'signed': m['signed']}
+                    'signed_by': m['signed_by'], 'signed': m['signed'], 'signed_version': m['signed_version']}
             if m['task_id']:
                 t = c.execute('SELECT title,status,owner FROM tasks WHERE id=?', (m['task_id'],)).fetchone()
                 owner = c.execute('SELECT name,kind,last_seen FROM sessions WHERE id=?',
@@ -1151,6 +1196,7 @@ class Store:
                 'awaiting_signoff': [m['project'] for m in joined
                                      if not m['signed_off'] and m['task_status'] != 'DONE'],
                 'awaiting_join': [m['project'] for m in members if not m['task_id']],
+                'contract_version': self._contract_version(c, x['id']),
                 'talk': f'send_message(recipient="{x["id"]}") reaches every other member',
                 'join_url': f'{self.desk_url}/x/{x["id"]}',
                 'paste_line': f'Join Project Desk crossover {x["id"]} ("{x["title"]}") from {self.desk_url}/x/{x["id"]}'}
@@ -1320,9 +1366,10 @@ class Store:
                 f'Next: {joined_task["next_step"]}')
             return self._crossover_view(c, crossover_id)
 
-    def sign_off_crossover(self, key, crossover_id, validation):
+    def sign_off_crossover(self, key, crossover_id, validation, evidence=None):
         """Record your side's validation of the joint work. The owner of your side's task signs."""
         validation = text(validation, 'validation evidence')
+        evidence = self._evidence_items(evidence)
         with self.connection(True) as c:
             s = self.auth(c, key)
             self._crossover_row(c, crossover_id)
@@ -1334,8 +1381,11 @@ class Store:
             if t['owner'] != s['id']:
                 raise PermissionError(f'Only the owner of {t["id"]} signs off for {s["project"]}')
             stamp = now()
-            c.execute('UPDATE crossover_members SET signoff=?,signed_by=?,signed=? WHERE crossover_id=? AND project=?',
-                      (validation, s['id'], stamp, crossover_id, s['project']))
+            c.execute('''UPDATE crossover_members SET signoff=?,signed_by=?,signed=?,signed_version=?
+                         WHERE crossover_id=? AND project=?''',
+                      (validation, s['id'], stamp, self._contract_version(c, crossover_id), crossover_id, s['project']))
+            if evidence:
+                self._store_evidence(c, t['id'], s['project'], s['id'], f'signoff:{crossover_id}', evidence)
             c.execute('UPDATE crossovers SET updated=? WHERE id=?', (stamp, crossover_id))
             self.event(c, s['project'], s['id'], 'crossover.signed_off', {'crossover_id': crossover_id, 'task_id': t['id']})
             view = self._crossover_view(c, crossover_id)

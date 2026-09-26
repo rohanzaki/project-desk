@@ -24,6 +24,7 @@ ROOT=Path(__file__).resolve().parent
 PROJECT=os.environ.get('PROJECT_DESK_PROJECT','default')
 ROSTER_PROJECT=os.environ.get('PROJECT_DESK_ROSTER_PROJECT',PROJECT)
 PORT=int(os.environ.get('PROJECT_DESK_PORT','7331'))
+STALE_HOURS=float(os.environ.get('PROJECT_DESK_STALE_HOURS','6'))
 INSTRUCTIONS='''Project Desk is the shared coordination system for the humans and the coding
 agents (Claude Code, Codex, and any other MCP client) working on a codebase.
 Register one identity per real session; keep session_key private. Your project is named in
@@ -33,6 +34,12 @@ Crossover, for work that spans projects: send_message reaches another project's 
 or '<project>:all|claude|codex'; list_peers shows who is there. For shared work, start_crossover
 from your task invites the other project; it joins with its own task (join_crossover), the
 crossover id reaches every member, and every side signs off (sign_off_crossover) before any is DONE.
+Memory: claim_task and would_conflict return lessons for your paths; recall searches them and
+remember adds one (short, with paths). Log progress on long tasks (log_progress); after a restart,
+register_session lists your earlier sessions: resume_session takes their tasks back.
+Busy inbox? check_in(include=["inbox_digest"]) lists first lines, read_messages opens some,
+acknowledge_inbox clears broadcasts. Use ask for questions that need an answer, request_approval
+for the human's decision, queue_for to wait for a service, wait_for to block until a reply.
 Check in before edits and at milestones.
 Claim literal relative file/directory paths before editing. Conflicts mean stop overlapping work.
 Before you plan around a file, would_conflict tells you who holds it without claiming it.
@@ -165,6 +172,10 @@ def create_app(db=None, roster=None):
           events    the event log since your cursor
           board     the full snapshot (what the dashboard and the hooks read)
           crossovers  open crossovers your project is invited to or joined
+          inbox_digest  unread messages as first lines, addressed-to-you first
+          questions   open questions for you, and yours with their answers
+          approvals   your approval requests and the human's decisions
+          queues      the resource queues you are in
         A typical agent turn wants include=["inbox","counts"].
         To learn who holds a path, use would_conflict — not a check_in section."""
         return store.check_in(session_key,since,include)
@@ -203,18 +214,25 @@ def create_app(db=None, roster=None):
     @mcp.tool()
     def update_task(session_key:str,task_id:str,version:int,status:str,next_step:str,
                     summary:str='',validation:str='',commit_ref:str='',deployment:str='not_deployed',
-                    resources:list[str]|None=None)->dict:
+                    resources:list[str]|None=None,evidence:list[dict]|None=None)->dict:
         """Update your task with its latest version. States RUNNING/BLOCKED/PAUSED/DONE.
         DONE requires summary + validation and releases claims. A human pause cannot be overridden by an agent.
-        Optional resources replaces the complete scope atomically. Deployment: not_deployed/not_applicable/deployed/failed."""
-        return store.update(session_key,task_id,version,status,next_step,summary,validation,commit_ref,deployment,resources)
+        Optional resources replaces the complete scope atomically. Deployment: not_deployed/not_applicable/deployed/failed.
+        evidence: optional checks [{command, exit_code, tests_passed, tests_failed, commit, output}]; the board
+        shows a task as checked or failing from them. deployed + commit_ref on a task holding service:X claims
+        records the deploy for prod_state."""
+        return store.update(session_key,task_id,version,status,next_step,summary,validation,commit_ref,deployment,
+                            resources,evidence)
 
     @mcp.tool()
-    def send_message(session_key:str,recipient:str,body:str,task_id:str|None=None)->dict:
+    def send_message(session_key:str,recipient:str,body:str,task_id:str|None=None,
+                     kind:str|None=None,reply_to:str|None=None)->dict:
         """Send to a session ID, codex, claude, rohan, or all. Sent is not acknowledged; broadcast receipts are per session.
         Across projects: a session ID registered in another project, '<project>:all|claude|codex|human',
-        or a crossover id (x-...) to reach every other member of that crossover."""
-        return store.message(session_key,recipient,body,task_id)
+        or a crossover id (x-...) to reach every other member of that crossover.
+        kind (optional): message, fyi, deploy, update, handoff, decision, crossover (inferred when omitted).
+        reply_to: the message you answer; replying to an ask() question marks it answered."""
+        return store.message(session_key,recipient,body,task_id,kind,reply_to)
 
     @mcp.tool()
     def list_peers(session_key:str,project:str='',hours:int=24)->dict:
@@ -237,10 +255,114 @@ def create_app(db=None, roster=None):
         return store.join_crossover(session_key,crossover_id,next_step,resources,task_id,title)
 
     @mcp.tool()
-    def sign_off_crossover(session_key:str,crossover_id:str,validation:str)->dict:
+    def sign_off_crossover(session_key:str,crossover_id:str,validation:str,evidence:list[dict]|None=None)->dict:
         """Record your side's validation of the joint work (owner of your side's task). No side can mark
-        its task DONE until every other joined side has signed off or finished; DONE counts as sign-off."""
-        return store.sign_off_crossover(session_key,crossover_id,validation)
+        its task DONE until every other joined side has signed off or finished; DONE counts as sign-off.
+        The sign-off records the contract version it matched; a new contract version clears sign-offs."""
+        return store.sign_off_crossover(session_key,crossover_id,validation,evidence)
+
+    @mcp.tool()
+    def crossover_contract(session_key:str,crossover_id:str,body:str|None=None)->dict:
+        """Read the crossover's agreed contract (API schema, example payloads), or pass body to publish a new
+        version. A new version clears every sign-off, so each side re-validates against it."""
+        return store.crossover_contract(session_key,crossover_id,body)
+
+    @mcp.tool()
+    def remember(session_key:str,body:str,paths:list[str]|None=None,tags:list[str]|None=None,
+                 scope:str='project')->dict:
+        """Save a short lesson every agent should know (a trap, a rule, a fact the code does not show).
+        paths: repo-relative paths it applies to; whoever claims or plans around them is handed it.
+        scope 'global' shares it with every project. Keep it to a few sentences with the why."""
+        return store.remember(session_key,body,paths,tags,scope)
+
+    @mcp.tool()
+    def recall(session_key:str,query:str='',paths:list[str]|None=None,tags:list[str]|None=None,
+               limit:int=10)->dict:
+        """Search the shared lessons (yours, other agents', the human's) by words, paths or tags."""
+        return store.recall(session_key,query,paths,tags,limit)
+
+    @mcp.tool()
+    def forget(session_key:str,lesson_id:str,reason:str)->dict:
+        """Archive a lesson that turned out wrong or no longer applies, with the reason."""
+        return store.forget(session_key,lesson_id,reason)
+
+    @mcp.tool()
+    def log_progress(session_key:str,task_id:str,entry:str)->dict:
+        """Append to your task's journal: a finding, a decision, what you tried. A resumed or future session
+        reads the journal in get_task_context, so write what you would need after losing your context."""
+        return store.log_progress(session_key,task_id,entry)
+
+    @mcp.tool()
+    def resume_session(session_key:str,from_session:str,reason:str='')->dict:
+        """Take back the open tasks of an earlier session of YOURS (same project, agent kind and worktree,
+        silent 30+ min), e.g. after a restart or a lost context. register_session lists candidates.
+        Its messages reach your inbox too. Returns the tasks with their journals."""
+        return store.resume_session(session_key,from_session,reason)
+
+    @mcp.tool()
+    def reopen_task(session_key:str,task_id:str,reason:str,next_step:str)->dict:
+        """Reopen a COMPLETED task in your project that you need, and own it. Its recorded paths are claimed
+        again atomically (refused if someone holds them now). The previous owner and the human are told."""
+        return store.reopen_task(session_key,task_id,reason,next_step)
+
+    @mcp.tool()
+    def read_messages(session_key:str,message_ids:list[str])->dict:
+        """Open the full text of messages from your inbox_digest. Reading does not acknowledge."""
+        return store.read_messages(session_key,message_ids)
+
+    @mcp.tool()
+    def acknowledge_inbox(session_key:str,kinds:list[str]|None=None,include_direct:bool=False)->dict:
+        """Acknowledge unread broadcasts in one call, optionally only some kinds (deploy, fyi, update...).
+        Messages addressed to you stay unread unless include_direct is true: read those first."""
+        return store.acknowledge_inbox(session_key,kinds,include_direct)
+
+    @mcp.tool()
+    def ask(session_key:str,recipient:str,question:str,task_id:str|None=None)->dict:
+        """Ask a question that needs an answer (same recipients as send_message, not a crossover). It stays
+        open until the recipient replies with send_message(reply_to=<question id>); check_in(include=
+        ["questions"]) and wait_for show the answer."""
+        return store.ask(session_key,recipient,question,task_id)
+
+    @mcp.tool()
+    def request_approval(session_key:str,title:str,options:list[str],context:str,task_id:str|None=None)->dict:
+        """Ask the human to choose between 2-6 options. The decision is recorded on the dashboard and sent back
+        to you (check_in include=["approvals"], or wait_for). A peer agent's word is never this approval."""
+        return store.request_approval(session_key,title,options,context,task_id)
+
+    @mcp.tool()
+    def queue_for(session_key:str,resource:str,note:str='',leave:bool=False)->dict:
+        """Join the queue for a held resource (usually service:<deploy lane>). When it frees, the first in line
+        gets a YOUR TURN message and 15 min to claim it. leave=true leaves the queue."""
+        return store.queue_for(session_key,resource,note,leave)
+
+    @mcp.tool()
+    def record_deploy(session_key:str,service:str,commit_ref:str,summary:str='',task_id:str|None=None)->dict:
+        """Record what you deployed (service name, commit). update_task with deployment=deployed does this
+        for the service:X claims it holds."""
+        return store.record_deploy(session_key,service,commit_ref,summary,task_id)
+
+    @mcp.tool()
+    def prod_state(session_key:str,service:str='')->dict:
+        """What is deployed now: the latest recorded deploy per service, and one service's history."""
+        return store.prod_state(session_key,service)
+
+    @mcp.tool()
+    async def wait_for(session_key:str,timeout:int=60,resources:list[str]|None=None,
+                       crossover_id:str|None=None)->dict:
+        """Block until something new arrives for you: a message addressed to you, an answer to your question,
+        the human's decision, a watched resource changing hands, or a watched crossover changing.
+        timeout 1-300 s. Returns what changed (empty on timeout). Cheaper than polling check_in."""
+        timeout=max(1,min(int(timeout),300))
+        session=await asyncio.to_thread(store.wait_session,session_key)
+        clean=[r for r in (resources or [])]
+        before=await asyncio.to_thread(store.wait_state,session,clean,crossover_id)
+        loop=asyncio.get_running_loop(); deadline=loop.time()+timeout
+        while True:
+            await asyncio.sleep(1)
+            after=await asyncio.to_thread(store.wait_state,session,clean,crossover_id)
+            changes=store.wait_changes(before,after)
+            if changes or loop.time()>=deadline:
+                return {'changed':changes,'timed_out':not changes,'unread_direct':len(after['direct'])}
 
     @mcp.tool()
     def acknowledge_message(session_key:str,message_id:str|None=None,message_ids:list[str]|None=None)->dict:
@@ -369,6 +491,8 @@ def create_app(db=None, roster=None):
             try:
                 await asyncio.to_thread(export_roster,store,roster)
                 if ticks%360==0: await asyncio.to_thread(store.backup,store.path.parent/'backups')
+                if ticks%6==0: await asyncio.to_thread(store.tend_queues)
+                if ticks%60==30: await asyncio.to_thread(store.alert_stale_claims,STALE_HOURS)
             except Exception: logging.exception('Project Desk maintenance failed')
             ticks+=1
             await asyncio.sleep(10)

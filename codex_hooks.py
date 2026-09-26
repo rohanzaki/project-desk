@@ -166,7 +166,9 @@ def collect(state, response, initial=False, full=False):
                            f"{compact(message.get('from_name') or '', 100)})")
             thread = message.get('task_id') or (f"crossover {message['crossover_id']}"
                                                 if message.get('crossover_id') else 'Team Inbox')
-            lines.append(f"UNACKNOWLEDGED MESSAGE {message['id']} from {sender} "
+            kind = message.get('kind')
+            tag = f" [{compact(kind, 20)}]" if kind and kind != 'message' else ''
+            lines.append(f"UNACKNOWLEDGED MESSAGE {message['id']}{tag} from {sender} "
                          f"task={compact(thread, 80)}: "
                          f"{compact(message['body'], 500)}")
     # Preserve only current inbox IDs. The server remains authoritative for receipts.
