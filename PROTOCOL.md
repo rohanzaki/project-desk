@@ -142,6 +142,16 @@ the original tables keep their shape, so older code still runs on the database.
   (refused on overlap). The previous owner and the human are told. Moving an
   OPEN task to another owner stays the human's call (Reassign) or a handoff.
 
+- **Action items**: what an agent leaves for others when it finishes a task or a
+  turn. `update_task(..., action_items=[...])` saves lines for the human, linked to
+  the task; `add_action_items(items, task_id, assignee)` takes `human`, `agents`, a
+  session id, or `<project>:human|agents`. They show as checkboxes on the dashboard
+  (Action points, and on the task card). `resolve_action_item` ticks one done,
+  dropped or open again: an agent may resolve items assigned to it or to agents, or
+  ones it wrote. `check_in(include=["action_items"])` lists yours. **Rule:** notes
+  an agent gives the human at the end of a task or turn ("left for you", "next",
+  "waiting on") are also saved as action items.
+
 All of this lives in new tables; the original tables keep their shape.
 
 ## Claim semantics and practical limits

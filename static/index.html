@@ -57,6 +57,11 @@
     <div id="shared-locks" hidden></div>
     <div id="crossovers" hidden></div>
     <section id="approvals" hidden aria-label="Decisions waiting for you"></section>
+    <section id="action-items" aria-label="Action points">
+      <div class="section-head"><div><h3>Action points</h3><p class="hint">What agents left for you, and for each other. Tick when done.</p></div>
+        <div class="section-actions"><select id="action-filter" aria-label="Whose action points"><option value="human">For you</option><option value="agents">For agents</option><option value="all">Everything open</option><option value="done">Recently done</option></select><button type="button" id="new-action">Add</button></div></div>
+      <div id="action-list"></div>
+    </section>
     <div id="stale-claims" hidden></div>
     <div id="prod-state" hidden></div>
     <section id="projects-overview" hidden aria-label="All projects"></section>

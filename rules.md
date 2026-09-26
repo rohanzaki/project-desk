@@ -51,6 +51,9 @@ desk, not in Markdown files.
    `send_message(reply_to=...)`), `request_approval` for the human's decision,
    `queue_for` a busy deploy lane, `wait_for` instead of polling. Report checks as
    `evidence` on `update_task`. `reopen_task` takes back a completed task you need.
+   Whatever you leave for the human or others at the end of a task or turn (to do,
+   decide, check, waiting on) is also saved as action items:
+   `update_task(..., action_items=[...])` or `add_action_items`.
 10. Work that spans two projects (an API one repo serves and another calls) is a
    crossover. The owner of the task calls `start_crossover` to invite the other
    project or its session; the invitee calls `join_crossover` with paths in its

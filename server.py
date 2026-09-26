@@ -40,6 +40,8 @@ register_session lists your earlier sessions: resume_session takes their tasks b
 Busy inbox? check_in(include=["inbox_digest"]) lists first lines, read_messages opens some,
 acknowledge_inbox clears broadcasts. Use ask for questions that need an answer, request_approval
 for the human's decision, queue_for to wait for a service, wait_for to block until a reply.
+Whatever you leave for the human or others at the end of a task or turn (things to do, decide or
+check), save as action items: update_task(action_items=[...]) or add_action_items. Say so in chat too.
 Check in before edits and at milestones.
 Claim literal relative file/directory paths before editing. Conflicts mean stop overlapping work.
 Before you plan around a file, would_conflict tells you who holds it without claiming it.
@@ -176,6 +178,7 @@ def create_app(db=None, roster=None):
           questions   open questions for you, and yours with their answers
           approvals   your approval requests and the human's decisions
           queues      the resource queues you are in
+          action_items  open action items for you (and for agents), and the ones you wrote
         A typical agent turn wants include=["inbox","counts"].
         To learn who holds a path, use would_conflict — not a check_in section."""
         return store.check_in(session_key,since,include)
@@ -214,15 +217,17 @@ def create_app(db=None, roster=None):
     @mcp.tool()
     def update_task(session_key:str,task_id:str,version:int,status:str,next_step:str,
                     summary:str='',validation:str='',commit_ref:str='',deployment:str='not_deployed',
-                    resources:list[str]|None=None,evidence:list[dict]|None=None)->dict:
+                    resources:list[str]|None=None,evidence:list[dict]|None=None,
+                    action_items:list[str]|None=None)->dict:
         """Update your task with its latest version. States RUNNING/BLOCKED/PAUSED/DONE.
         DONE requires summary + validation and releases claims. A human pause cannot be overridden by an agent.
         Optional resources replaces the complete scope atomically. Deployment: not_deployed/not_applicable/deployed/failed.
         evidence: optional checks [{command, exit_code, tests_passed, tests_failed, commit, output}]; the board
         shows a task as checked or failing from them. deployed + commit_ref on a task holding service:X claims
-        records the deploy for prod_state."""
+        records the deploy for prod_state. action_items: short lines left for the human (things they must do or
+        decide, follow-ups nobody owns yet); they land on the dashboard as checkboxes linked to this task."""
         return store.update(session_key,task_id,version,status,next_step,summary,validation,commit_ref,deployment,
-                            resources,evidence)
+                            resources,evidence,action_items)
 
     @mcp.tool()
     def send_message(session_key:str,recipient:str,body:str,task_id:str|None=None,
@@ -266,6 +271,19 @@ def create_app(db=None, roster=None):
         """Read the crossover's agreed contract (API schema, example payloads), or pass body to publish a new
         version. A new version clears every sign-off, so each side re-validates against it."""
         return store.crossover_contract(session_key,crossover_id,body)
+
+    @mcp.tool()
+    def add_action_items(session_key:str,items:list[str],task_id:str|None=None,assignee:str='human')->dict:
+        """Save what is left as checkable items: the notes you end a task or a turn with ("left for you: ...").
+        assignee: 'human' (the owner's dashboard to-do list), 'agents' (any agent in your project), a session id,
+        or '<project>:human|agents' for another project. Link task_id when they come from a task."""
+        return store.add_action_items(session_key,items,task_id,assignee)
+
+    @mcp.tool()
+    def resolve_action_item(session_key:str,item_id:str,status:str='done',note:str='')->dict:
+        """Tick an action item done (or 'dropped', or 'open' to reopen it): one assigned to you or to agents in
+        your project, or one you wrote. check_in(include=["action_items"]) lists yours."""
+        return store.resolve_action_item(session_key,item_id,status,note)
 
     @mcp.tool()
     def remember(session_key:str,body:str,paths:list[str]|None=None,tags:list[str]|None=None,

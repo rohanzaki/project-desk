@@ -26,7 +26,7 @@ class Store(FeaturesMixin):
     # twice in one night, so the message the agent needed could not be read at
     # all. An agent should ask for sections instead: ['inbox','conflicts'].
     SECTIONS = ('events', 'inbox', 'board', 'my_tasks', 'counts', 'crossovers',
-                'inbox_digest', 'questions', 'approvals', 'queues')
+                'inbox_digest', 'questions', 'approvals', 'queues', 'action_items')
     # What a caller that passes no `include` has always received.
     LEGACY_SECTIONS = ('events', 'inbox', 'board')
     # Long prose fields are kept whole in the inbox (the body IS the point) but
@@ -462,8 +462,10 @@ class Store(FeaturesMixin):
         return task_id
 
     def update(self, key, task_id, version, status, next_step, summary='', validation='', commit_ref='',
-               deployment='not_deployed', resources=None, evidence=None):
+               deployment='not_deployed', resources=None, evidence=None, action_items=None):
         evidence = self._evidence_items(evidence)
+        if action_items is not None and (not isinstance(action_items, list) or len(action_items) > 20):
+            raise ValueError('action_items is a list of up to 20 short lines for the human')
         if status not in ('RUNNING','BLOCKED','PAUSED','DONE'):
             raise ValueError('Invalid task status')
         if deployment not in ('not_deployed','not_applicable','deployed','failed'):
@@ -502,6 +504,8 @@ class Store(FeaturesMixin):
                       f'{status}: ' + (summary if status == 'DONE' else next_step))
             if evidence:
                 self._store_evidence(c, task_id, s['project'], s['id'], 'task', evidence)
+            if action_items:
+                self._add_action_items(c, s['project'], s['id'], action_items, task_id, 'human')
             if deployment == 'deployed' and commit_ref and (t['deployment'] != 'deployed' or t['commit_ref'] != commit_ref):
                 for service in [r for r in t['resources'] if r.startswith('service:')]:
                     self._record_deploy(c, s['project'], s['id'], service, commit_ref, summary or next_step, task_id)
@@ -660,6 +664,8 @@ class Store(FeaturesMixin):
             return {'project':t['project'], 'task':t, 'comments':self._decorate(c, comments),
                     'crossovers':[self._crossover_view(c, crossover_id)] if crossover_id else [],
                     'journal':self._journal(c, task_id),
+                    'action_items':[self._action_dict(c, r) for r in c.execute(
+                        'SELECT * FROM action_items WHERE task_id=? ORDER BY created', (task_id,))],
                     'evidence':self._evidence_list(c, task_id),
                     'lessons':self._lessons_for_paths(c, t['project'], t['resources']),
                     'comment_limit':self.CONTEXT_COMMENT_LIMIT,
@@ -976,6 +982,7 @@ class Store(FeaturesMixin):
                 marks=','.join('?'*len(ids))
                 out['counts']={'unread_messages':unread,'unread_direct':direct,'unread_broadcast':unread-direct,
                                'open_questions_for_me':len(self._questions(c,s,ids)['for_me']),
+                               'open_action_items_for_me':len(self._action_items_for(c,s,ids)['for_me']),
                                'my_pending_approvals':c.execute(f"SELECT COUNT(*) FROM approvals WHERE status='pending' AND requester IN ({marks})",ids).fetchone()[0],
                                'my_tasks':len(mine),
                                'my_open_tasks':sum(1 for t in mine if t['status'] not in ('DONE','CANCELLED')),
@@ -989,6 +996,8 @@ class Store(FeaturesMixin):
                 marks=','.join('?'*len(ids))
                 out['approvals']=[self._approval_row(c,r[0]) for r in c.execute(
                     f'SELECT id FROM approvals WHERE requester IN ({marks}) ORDER BY created DESC LIMIT 20',ids)]
+            if wants('action_items'):
+                out['action_items']=self._action_items_for(c,s,ids)
             if wants('queues'):
                 marks=','.join('?'*len(ids))
                 out['queues']=[{'resource':r['resource'],'queue':self._queue_view(c,r['resource'],s['project']),
@@ -1030,6 +1039,7 @@ class Store(FeaturesMixin):
                 'stale_claims':self._stale(c,project,limit=50),
                 'task_logs':self._recent_logs(c,[t['id'] for t in tasks if t['status']!='DONE'][:100]),
                 'evidence':self._evidence_summary(c,[t['id'] for t in tasks]),
+                'action_items':self._board_actions(c,project),
                 'generated_at':now()}
 
     def snapshot(self,project):
@@ -1047,6 +1057,14 @@ class Store(FeaturesMixin):
                      text(data['next_step'],'next step'),now()))
                 self.event(c,project,'rohan','task.queued',{'task_id':tid})
                 return self.task(c,tid)
+            if action=='action.add':
+                items=data.get('items') or data.get('body') or []
+                if isinstance(items,str): items=[line.strip(' -*[]\t') for line in items.splitlines() if line.strip(' -*[]\t')]
+                return {'items':self._add_action_items(c,project,HUMAN,items,data.get('task_id') or None,
+                                                       data.get('assignee') or 'human')}
+            if action=='action.resolve':
+                return self._resolve_action_item(c,HUMAN,project,data.get('item_id',''),data.get('status','done'),
+                                                 data.get('note',''))
             if action=='approval.decide':
                 return self._decide_approval(c,project,data)
             if action=='lesson.create':

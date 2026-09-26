@@ -58,6 +58,13 @@ FEATURE_SCHEMA = '''
     CREATE TABLE IF NOT EXISTS stale_alerts (
         task_id TEXT NOT NULL, owner TEXT NOT NULL, owner_last_seen TEXT NOT NULL, alerted TEXT NOT NULL,
         PRIMARY KEY(task_id, owner, owner_last_seen));
+    CREATE TABLE IF NOT EXISTS action_items (
+        id TEXT PRIMARY KEY, project TEXT NOT NULL, origin_project TEXT NOT NULL, task_id TEXT,
+        author TEXT NOT NULL, assignee TEXT NOT NULL, body TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open', created TEXT NOT NULL,
+        resolved TEXT, resolved_by TEXT, resolution TEXT NOT NULL DEFAULT '');
+    CREATE INDEX IF NOT EXISTS action_items_project ON action_items(project, status);
+    CREATE INDEX IF NOT EXISTS action_items_task ON action_items(task_id);
 '''
 
 MESSAGE_KINDS = ('message', 'question', 'answer', 'deploy', 'fyi', 'update', 'handoff',
@@ -814,6 +821,150 @@ class FeaturesMixin:
                 c.executemany('INSERT OR IGNORE INTO stale_alerts VALUES(?,?,?,?)',
                               [(r['task_id'], r['owner'], r['owner_last_seen'], stamp) for r in rows])
             return len(fresh)
+
+    # ---- 12. action items: what is left, saved where it happened ----------------
+    #
+    # The notes an agent ends a task or a turn with ("left for you: ...") become
+    # items with a checkbox, linked to the project, the task and the session that
+    # wrote them. 'human' items are the owner's to-do list on the dashboard;
+    # 'agents' items are for any agent in the project; a session id is for one.
+
+    ACTION_ITEM_CHARS = 600
+
+    def _action_target(self, c, project, assignee):
+        """(project the item lives in, stored assignee) for 'human', 'agents', a session id or '<project>:human|agents'."""
+        assignee = (assignee or 'human').strip()
+        if assignee in ('human', HUMAN):
+            return project, HUMAN
+        if assignee == 'agents':
+            return project, 'agents'
+        if ':' in assignee:
+            slug, _, who = assignee.partition(':')
+            who = HUMAN if who in ('human', HUMAN) else who
+            if who not in (HUMAN, 'agents'):
+                raise ValueError("Assign another project's items to '<project>:human' or '<project>:agents'")
+            self._open_project(c, slug)
+            return slug, who
+        row = c.execute('SELECT project, imported FROM sessions WHERE id=?', (assignee,)).fetchone()
+        if not row or row['imported']:
+            raise ValueError("Assign to 'human', 'agents', a session id, or '<project>:human|agents'")
+        self._open_project(c, row['project'])
+        return row['project'], assignee
+
+    def _add_action_items(self, c, project, author, items, task_id=None, assignee='human'):
+        if isinstance(items, str):
+            items = [items]
+        if not isinstance(items, list) or not items or len(items) > 20:
+            raise ValueError('Give 1–20 action items')
+        bodies = [text(item, 'action item', self.ACTION_ITEM_CHARS) for item in items]
+        if task_id and self.task(c, task_id)['project'] != project:
+            raise ValueError('Task belongs to another project')
+        target, who = self._action_target(c, project, assignee)
+        stamp, made = now(), []
+        for body in bodies:
+            if c.execute("SELECT 1 FROM action_items WHERE project=? AND body=? AND status='open' AND "
+                         "IFNULL(task_id,'')=IFNULL(?,'')", (target, body, task_id)).fetchone():
+                continue   # the same open item twice is one item
+            item_id = ident('ai-')
+            c.execute('''INSERT INTO action_items(id,project,origin_project,task_id,author,assignee,body,created)
+                         VALUES(?,?,?,?,?,?,?,?)''', (item_id, target, project, task_id, author, who, body, stamp))
+            made.append(item_id)
+        if made:
+            self.event(c, target, author, 'action.added', {'items': made, 'task_id': task_id, 'assignee': who,
+                                                           'from_project': project})
+            if task_id and target == project:
+                self._log(c, task_id, project, author, 'action',
+                          f"{len(made)} action item(s) for {self._display_name(c, who) if who != 'agents' else 'agents'}: "
+                          + ' | '.join(b[:120] for b in bodies))
+        return [self._action_row(c, item_id) for item_id in made]
+
+    def add_action_items(self, key, items, task_id=None, assignee='human'):
+        with self.connection(True) as c:
+            s = self.auth(c, key)
+            return {'items': self._add_action_items(c, s['project'], s['id'], items, task_id, assignee)}
+
+    def _action_row(self, c, item_id, names=None):
+        row = c.execute('SELECT * FROM action_items WHERE id=?', (item_id,)).fetchone()
+        if not row:
+            raise ValueError('Unknown action item')
+        return self._action_dict(c, row, names)
+
+    def _action_dict(self, c, row, names=None):
+        item = dict(row)
+        lookup = names if names is not None else self._names(c, [row['author'], row['assignee'], row['resolved_by']])
+        item['author_name'] = lookup.get(row['author'], row['author'])
+        item['assignee_name'] = 'Any agent' if row['assignee'] == 'agents' else lookup.get(row['assignee'], row['assignee'])
+        if row['resolved_by']:
+            item['resolved_by_name'] = lookup.get(row['resolved_by'], row['resolved_by'])
+        if row['task_id']:
+            task = c.execute('SELECT title FROM tasks WHERE id=?', (row['task_id'],)).fetchone()
+            item['task_title'] = task['title'] if task else ''
+        return item
+
+    def _resolve_action_item(self, c, actor, actor_project, item_id, status, note, ids=()):
+        if status not in ('done', 'dropped', 'open'):
+            raise ValueError("status is 'done', 'dropped', or 'open' to reopen it")
+        item = c.execute('SELECT * FROM action_items WHERE id=?', (item_id,)).fetchone()
+        if not item:
+            raise ValueError('Unknown action item')
+        if actor != HUMAN:
+            mine = item['author'] in ids or item['assignee'] in ids
+            for_agents = item['assignee'] == 'agents' and item['project'] == actor_project
+            if not (mine or for_agents):
+                raise PermissionError('Resolve items assigned to you or to agents in your project, or ones you wrote')
+        elif item['project'] != actor_project and item['origin_project'] != actor_project:
+            raise ValueError('Action item belongs to another project')
+        note = (note or '').strip()[:1000]
+        if status == 'open':
+            c.execute("UPDATE action_items SET status='open',resolved=NULL,resolved_by=NULL,resolution='' WHERE id=?",
+                      (item_id,))
+        else:
+            c.execute('UPDATE action_items SET status=?,resolved=?,resolved_by=?,resolution=? WHERE id=?',
+                      (status, now(), actor, note, item_id))
+        self.event(c, item['project'], actor, 'action.resolved', {'item_id': item_id, 'status': status})
+        if item['task_id'] and item['project'] == item['origin_project']:
+            self._log(c, item['task_id'], item['project'], actor, 'action',
+                      f"Action item {status}: {item['body'][:160]}" + (f' — {note}' if note else ''))
+        return self._action_row(c, item_id)
+
+    def resolve_action_item(self, key, item_id, status='done', note=''):
+        with self.connection(True) as c:
+            s = self.auth(c, key)
+            return self._resolve_action_item(c, s['id'], s['project'], item_id, status, note, self._aliases(c, s['id']))
+
+    def _action_items_for(self, c, s, ids):
+        marks = ','.join('?' * len(ids))
+        for_me = c.execute(f'''SELECT * FROM action_items WHERE status='open' AND project=?
+                               AND (assignee IN ({marks}) OR assignee='agents') ORDER BY created LIMIT 100''',
+                           (s['project'], *ids)).fetchall()
+        mine = c.execute(f'''SELECT * FROM action_items WHERE status='open' AND author IN ({marks})
+                             ORDER BY created DESC LIMIT 100''', ids).fetchall()
+        names = self._names(c, [r['author'] for r in for_me + mine] + [r['assignee'] for r in for_me + mine])
+        return {'for_me': [self._action_dict(c, r, names) for r in for_me],
+                'written_by_me': [self._action_dict(c, r, names) for r in mine]}
+
+    def _board_actions(self, c, project, limit=200):
+        rows = c.execute('''SELECT * FROM action_items WHERE (project=? OR origin_project=?)
+                            AND (status='open' OR resolved>?) ORDER BY status='open' DESC, created DESC LIMIT ?''',
+                         (project, project, _ago(hours=72), limit)).fetchall()
+        names = self._names(c, [r['author'] for r in rows] + [r['assignee'] for r in rows]
+                            + [r['resolved_by'] for r in rows if r['resolved_by']])
+        titles = {}
+        task_ids = sorted({r['task_id'] for r in rows if r['task_id']})
+        if task_ids:
+            titles = {r['id']: r['title'] for r in c.execute(
+                f"SELECT id,title FROM tasks WHERE id IN ({','.join('?' * len(task_ids))})", task_ids)}
+        out = []
+        for r in rows:
+            item = dict(r)
+            item['author_name'] = names.get(r['author'], r['author'])
+            item['assignee_name'] = 'Any agent' if r['assignee'] == 'agents' else names.get(r['assignee'], r['assignee'])
+            if r['resolved_by']:
+                item['resolved_by_name'] = names.get(r['resolved_by'], r['resolved_by'])
+            if r['task_id']:
+                item['task_title'] = titles.get(r['task_id'], '')
+            out.append(item)
+        return out
 
     # ---- 11. an agent reopens a finished task it needs -------------------------
 

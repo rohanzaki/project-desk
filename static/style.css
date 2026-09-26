@@ -274,3 +274,12 @@ footer{padding:18px clamp(18px,3.2vw,54px) 28px;font-size:10px;color:#6a7773}
 .lesson{padding:.5rem 0;border-bottom:1px solid #e3e8f0}
 .lesson p{margin:0 0 .2rem;white-space:pre-wrap}
 .lesson button{margin-top:.25rem;font-size:.75rem}
+#action-items{margin:.5rem 0;padding:.6rem .8rem;border-radius:8px;background:#f3f6fb;border:1px solid #dbe3ef}
+#action-items h3{margin:0;font-size:.95rem;color:#234675}
+#action-items .section-head{display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;flex-wrap:wrap}
+.action-item{display:flex;gap:.5rem;align-items:flex-start;padding:.3rem 0;border-top:1px solid #e3e8f0;cursor:pointer}
+.action-item input{margin-top:.2rem}
+.action-item .action-body{display:block;color:#172b46}
+.action-item .meta{display:block;font-size:.75rem}
+.action-done .action-body{text-decoration:line-through;color:#6b7a90}
+.task-actions-list{margin-top:.4rem}

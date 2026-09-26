@@ -93,7 +93,10 @@ use `check_in(include=["inbox_digest"])`, then `read_messages`, and
 `acknowledge_inbox` for broadcasts. `ask` with `reply_to` answers,
 `request_approval` goes to the human, and `wait_for` replaces polling.
 `queue_for` a deploy lane and check `prod_state`. Add `evidence` to
-`update_task`; `reopen_task` takes back a completed task you need.
+`update_task`; `reopen_task` takes back a completed task you need. What you
+leave for the human at the end of a task or turn goes in as action items too
+(`update_task(action_items=[...])` or `add_action_items`): they become
+checkboxes on the dashboard.
 
 ## Existing build and production rules still apply
 

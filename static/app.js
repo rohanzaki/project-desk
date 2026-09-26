@@ -44,7 +44,7 @@ const pinKey=projectName=>`project-desk:pinned-tasks:${projectName}`;
 const significantEvent=event=>event&&(
   event.kind.startsWith('task.')||event.kind.startsWith('handoff.')||event.kind==='message.sent'||
   event.kind==='note.created'||event.kind==='changelog.published'||event.kind==='approval.requested'||
-  event.kind==='deploy.recorded');
+  event.kind==='deploy.recorded'||event.kind==='action.added');
 
 function maxEventSeq(){return Math.max(0,...(board?.events||[]).map(event=>Number(event.seq)||0));}
 
@@ -199,6 +199,27 @@ function journalHtml(task){
   const entries=(board.task_logs||{})[task.id]||[];
   if(!entries.length)return '';
   return `<div class="journal"><span class="detail-label">Recent log</span>${entries.map(entry=>`<div class="journal-entry"><span>${esc(entry.kind)}</span> ${esc(entry.entry.slice(0,220))} <time>${time(entry.created)}</time></div>`).join('')}</div>`;
+}
+function actionItemHtml(item,withTask=true){
+  const done=item.status!=='open';
+  const who=item.assignee==='rohan'?'you':item.assignee_name;
+  const origin=item.origin_project&&item.origin_project!==project()?` · from ${esc(item.origin_project)}`:(item.project!==project()?` · for ${esc(item.project)}`:'');
+  return `<label class="action-item${done?' action-done':''}"><input type="checkbox" data-action-item="${esc(item.id)}"${done?' checked':''}><span><span class="action-body">${esc(item.body)}</span><span class="meta">for ${esc(who)} · ${esc(item.author_name)} · ${time(item.created)}${withTask&&item.task_title?` · ${esc(item.task_title.slice(0,60))}`:''}${origin}${done&&item.resolved_by_name?` · ${esc(item.status)} by ${esc(item.resolved_by_name)}`:''}${item.resolution?` — ${esc(item.resolution)}`:''}</span></span></label>`;
+}
+function renderActionItems(){
+  const box=$('#action-items');
+  if(onOverview()){box.hidden=true;return;}
+  box.hidden=false;
+  const filter=$('#action-filter').value,all=board.action_items||[];
+  const shown=all.filter(item=>filter==='done'?item.status!=='open':item.status==='open'&&(filter==='all'||(filter==='human'?item.assignee==='rohan':item.assignee!=='rohan')));
+  const openForYou=all.filter(item=>item.status==='open'&&item.assignee==='rohan').length;
+  $('#action-filter').options[0].textContent=`For you${openForYou?` (${openForYou})`:''}`;
+  $('#action-list').innerHTML=shown.length?shown.map(item=>actionItemHtml(item)).join(''):'<p class="empty">Nothing here. Agents add what they leave for you when they finish.</p>';
+}
+function taskActionsHtml(task){
+  const items=(board.action_items||[]).filter(item=>item.task_id===task.id);
+  if(!items.length)return '';
+  return `<div class="task-actions-list"><span class="detail-label">Action points</span>${items.map(item=>actionItemHtml(item,false)).join('')}</div>`;
 }
 function renderApprovals(){
   const box=$('#approvals');
@@ -388,6 +409,7 @@ function taskCard(task,expanded=false){
         <div><span class="detail-label">Evidence</span><pre>${esc('Task: '+task.id+'\nValidation: '+(task.validation||'Not recorded')+'\nCommit: '+(task.commit_ref||'Not recorded')+'\nDeployment: '+task.deployment+'\nWorktree: '+(board.sessions.find(session=>session.id===task.owner)?.worktree||'Not claimed')+'\nBranch: '+(board.sessions.find(session=>session.id===task.owner)?.branch||'Not claimed'))}</pre></div>
       </div>
       ${task.imported?`<div class="imported">${task.status==='DONE'?'Imported completion report':'Imported report — ownership needs confirmation'}</div>`:''}
+      ${taskActionsHtml(task)}
       ${journalHtml(task)}
       ${crossoverFor(task.id)?`<div class="imported">In crossover ${esc(crossoverFor(task.id).id)} with ${esc(crossoverFor(task.id).members.filter(member=>member.task_id!==task.id).map(member=>member.project).join(', ')||'nobody yet')} · ${esc(crossoverFor(task.id).status)}</div>`:''}
       ${task.pending_owner?`<div class="imported">Handoff offered to ${esc(name(task.pending_owner))}; awaiting acceptance</div>`:''}
@@ -483,6 +505,7 @@ function render(){
   renderSharedLocks();
   renderCrossovers();
   renderApprovals();
+  renderActionItems();
   renderStale();
   renderProd();
   renderLessons();
@@ -575,6 +598,16 @@ $('#approvals').addEventListener('click',event=>{
   if(decision){mutate('approval.decide',{approval_id:approval,decision}).then(refresh).catch(error=>{$('#notice').textContent=error.message;});return;}
   openEditor('Another answer',field('Your decision','decision')+field('Note for the agent','note','textarea'),data=>mutate('approval.decide',{approval_id:approval,decision:data.decision,note:data.note}),'Send decision');
 });
+document.addEventListener('change',event=>{
+  const box=event.target.closest('[data-action-item]');
+  if(!box)return;
+  mutate('action.resolve',{item_id:box.dataset.actionItem,status:box.checked?'done':'open'}).then(refresh).catch(error=>{$('#notice').textContent=error.message;box.checked=!box.checked;});
+});
+$('#action-filter').addEventListener('change',renderActionItems);
+$('#new-action').addEventListener('click',()=>openEditor('Add action points',
+  field('One per line','body','textarea')+
+  field('For','assignee','select','human',[{value:'human',label:'Me (the human)'},{value:'agents',label:'Any agent in this project'}]),
+  data=>mutate('action.add',data),'Add'));
 $('#lessons').addEventListener('click',event=>{
   const button=event.target.closest('[data-archive-lesson]');
   if(!button)return;

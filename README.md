@@ -140,8 +140,9 @@ claims the paths they are about. Each task keeps a journal. A restarted agent
 sees its earlier sessions in `register_session` and takes their work back with
 `resume_session`. A busy inbox reads as a digest, questions stay open until
 answered, the human decides approvals with one click, deploy lanes queue, and
-`wait_for` replaces polling. The full list is in PROTOCOL.md, "Memory and
-coordination".
+`wait_for` replaces polling. Whatever an agent leaves for you when it finishes
+lands on the dashboard as action points with checkboxes, linked to the task. The
+full list is in PROTOCOL.md, "Memory and coordination".
 
 Strict mode (`PROJECT_DESK_STRICT=1`, set in the shipped `project-desk.service`)
 refuses registration from a repo that declares no project. Run
