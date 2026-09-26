@@ -173,13 +173,21 @@ function switchProject(slug){
   showBoard();renderProjectSelect();refresh();
 }
 const senderLabel=message=>message.from_project?`${message.from_name||message.sender} (project ${message.from_project})`:name(message.sender);
+const crossoverFor=taskId=>(board?.crossovers||[]).find(item=>item.members.some(member=>member.task_id===taskId));
+function showCrossoverLink(view){
+  const readonly=(label,value)=>`<label>${esc(label)}<textarea readonly rows="3">${esc(value)}</textarea></label>`;
+  openEditor(`Crossover ${view.id}`,
+    readonly("Paste into the other project's Claude or Codex",view.paste_line)+
+    `<p><a href="/x/${encodeURIComponent(view.id)}" target="_blank" rel="noopener">Open the join page</a> · waiting to join: ${esc((view.awaiting_join||[]).join(', ')||'nobody')}</p>`,
+    async()=>{},'Done');
+}
 function renderCrossovers(){
   const box=$('#crossovers');
   if(onOverview()){box.hidden=true;return;}
   const dayAgo=Date.now()-864e5;
   const items=(board?.crossovers||[]).filter(item=>item.status!=='closed'||new Date(item.updated).getTime()>dayAgo);
   box.hidden=!items.length;
-  box.innerHTML=items.length?'<strong>Crossovers with other projects</strong>'+items.map(item=>`<div class="crossover crossover-${esc(item.status)}"><span class="crossover-status">${esc(item.status)}</span> <strong>${esc(item.title)}</strong> <span class="meta">${esc(item.id)}</span><div class="crossover-members">${item.members.map(member=>`<span class="crossover-member">${esc(member.project)}: ${member.task_id?`${esc(member.owner_name||shortId(member.owner))} · ${esc(shortId(member.task_id))} · ${esc(member.task_status||'')} · ${member.signed_off?'signed off':'awaiting sign-off'}`:'invited, not joined'}</span>`).join('')}</div></div>`).join(''):'';
+  box.innerHTML=items.length?'<strong>Crossovers with other projects</strong>'+items.map(item=>`<div class="crossover crossover-${esc(item.status)}"><span class="crossover-status">${esc(item.status)}</span> <strong>${esc(item.title)}</strong> <span class="meta">${esc(item.id)}</span> <button type="button" class="crossover-link" data-crossover-link="${esc(item.id)}">Join link</button><div class="crossover-members">${item.members.map(member=>`<span class="crossover-member">${esc(member.project)}: ${member.task_id?`${esc(member.owner_name||shortId(member.owner))} · ${esc(shortId(member.task_id))} · ${esc(member.task_status||'')} · ${member.signed_off?'signed off':'awaiting sign-off'}`:'invited, not joined'}</span>`).join('')}</div></div>`).join(''):'';
 }
 function renderSharedLocks(){
   const box=$('#shared-locks');
@@ -341,12 +349,13 @@ function taskCard(task,expanded=false){
         <div><span class="detail-label">Evidence</span><pre>${esc('Task: '+task.id+'\nValidation: '+(task.validation||'Not recorded')+'\nCommit: '+(task.commit_ref||'Not recorded')+'\nDeployment: '+task.deployment+'\nWorktree: '+(board.sessions.find(session=>session.id===task.owner)?.worktree||'Not claimed')+'\nBranch: '+(board.sessions.find(session=>session.id===task.owner)?.branch||'Not claimed'))}</pre></div>
       </div>
       ${task.imported?`<div class="imported">${task.status==='DONE'?'Imported completion report':'Imported report — ownership needs confirmation'}</div>`:''}
+      ${crossoverFor(task.id)?`<div class="imported">In crossover ${esc(crossoverFor(task.id).id)} with ${esc(crossoverFor(task.id).members.filter(member=>member.task_id!==task.id).map(member=>member.project).join(', ')||'nobody yet')} · ${esc(crossoverFor(task.id).status)}</div>`:''}
       ${task.pending_owner?`<div class="imported">Handoff offered to ${esc(name(task.pending_owner))}; awaiting acceptance</div>`:''}
       ${handoffBrief(task)}
       ${discussion(task)}
       ${task.status==='DONE'
         ? '<div class="actions"><button class="reopen-action" data-action="reopen">Reopen &amp; reassign</button></div>'
-        : `<div class="actions"><button data-action="${task.human_paused?'resume':'pause'}">${task.human_paused?'Resume':'Pause'}</button><button data-action="priority">Set priority</button><button data-action="reassign">Reassign</button><button data-action="close">Close with note</button></div>`}
+        : `<div class="actions"><button data-action="${task.human_paused?'resume':'pause'}">${task.human_paused?'Resume':'Pause'}</button><button data-action="priority">Set priority</button><button data-action="reassign">Reassign</button><button data-action="crossover">Cross over</button><button data-action="close">Close with note</button></div>`}
     </details>
   </article>`;
 }
@@ -502,8 +511,24 @@ $('#tasks').addEventListener('click',event=>{
       field('Receiving session','session_id','select','',options)+
       field('What should happen next','next_step','textarea'),
       data=>mutate(action,{...base,...data}));
+  }else if(action==='crossover'){
+    const existing=crossoverFor(task.id);
+    const others=projects.filter(item=>item.slug!==project()&&!item.hidden&&!(existing?.members||[]).some(member=>member.project===item.slug));
+    if(!others.length&&existing){showCrossoverLink(existing);return;}
+    const options=[{value:'',label:'Select the other project…',disabled:true},...others.map(item=>({value:item.slug,label:item.name}))];
+    openEditor(existing?`Invite another project to ${existing.id}`:'Cross over into another project',
+      '<p class="dialog-hint">The other project joins with its own task in its own repo. You get a line to paste into that project\'s Claude or Codex.</p>'+
+      field('Other project','invite','select','',options)+field('Note for them (optional)','note','textarea','',[],false),
+      async data=>{const view=await mutate('crossover.start',{task_id:task.id,invite:[data.invite],note:data.note||''});setTimeout(()=>showCrossoverLink(view),0);},'Create link');
   }else if(action==='close')openEditor('Close task and release its claims',field('Outcome or cancellation reason','summary','textarea'),data=>mutate(action,{...base,...data}));
   else openEditor(action==='pause'?'Pause this task':'Resume this task',`<p>${esc(task.title)}</p><p>${action==='pause'?'Claims stay reserved. The agent must check in to see your pause.':'This releases your pause instruction; it does not start an agent automatically.'}</p>`,()=>mutate(action,base));
+});
+
+$('#crossovers').addEventListener('click',event=>{
+  const button=event.target.closest('[data-crossover-link]');
+  if(!button)return;
+  const view=(board?.crossovers||[]).find(item=>item.id===button.dataset.crossoverLink);
+  if(view)showCrossoverLink(view);
 });
 
 $('#tasks').addEventListener('toggle',event=>{

@@ -127,6 +127,10 @@ Projects stay isolated by default. Two explicit doors open between them:
   can read each other's task with `get_task_context`, and each side records
   `sign_off_crossover`. No side can mark its task DONE until every other joined
   side has signed off or finished. The human can still close any task.
+- **The link.** Every crossover has a join page at `/x/<id>` and a one-line
+  `paste_line` ("Join Project Desk crossover x-… from http://…/x/x-…") to paste
+  into the other project's agent. Tell an agent "cross over this task with
+  <project>", or press **Cross over** on a task in the dashboard, to get one.
 
 Strict mode (`PROJECT_DESK_STRICT=1`, set in the shipped `project-desk.service`)
 refuses registration from a repo that declares no project. Run

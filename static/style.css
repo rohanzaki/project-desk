@@ -251,3 +251,4 @@ footer{padding:18px clamp(18px,3.2vw,54px) 28px;font-size:10px;color:#6a7773}
 .crossover-validated .crossover-status{color:#28704e}
 .crossover-closed{opacity:.6}
 .crossover-members{display:flex;flex-wrap:wrap;gap:.25rem .9rem;margin-top:.15rem}
+.crossover-link{margin-left:.4rem;padding:.1rem .5rem;font-size:.75rem}

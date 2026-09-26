@@ -411,3 +411,69 @@ def test_mcp_exposes_crossover_tools(tmp_path, monkeypatch):
         view = call(client, 'sign_off_crossover', {'session_key': b['session_key'], 'crossover_id': x['id'],
                                                    'validation': 'client ok'})
         assert view['id'] == x['id']
+
+
+# ---------- the link: tell Claude, or paste a line into the other project's agent ----------
+
+def test_every_view_carries_a_join_link_and_the_invite_mentions_it(desk):
+    d, a, a2, b = desk
+    ta = d.claim(a['session_key'], 'Tender API', ['src/api'], 'Build')
+    x = d.start_crossover(a['session_key'], ta['id'], ['beta'])
+    assert x['join_url'].endswith(f"/x/{x['id']}")
+    assert x['paste_line'].startswith(f"Join Project Desk crossover {x['id']}") and x['join_url'] in x['paste_line']
+    assert any(x['join_url'] in m['body'] for m in inbox(d, b))
+
+
+def test_join_page(tmp_path, monkeypatch):
+    from server import create_app
+    monkeypatch.setenv('PROJECT_DESK_STRICT', '1')
+    app = create_app(tmp_path / 'db.sqlite3', tmp_path / 'ROSTER.md')
+    store = app.state.store
+    a = store.register('alpha api agent', 'claude', '', 'main', declared(tmp_path, 'alpha'))
+    store.register('beta client agent', 'claude', '', 'main', declared(tmp_path, 'beta'))
+    ta = store.claim(a['session_key'], 'Tender API', ['src/api'], 'Build')
+    x = store.start_crossover(a['session_key'], ta['id'], ['beta'])
+    with TestClient(app) as client:
+        page = client.get(f"/x/{x['id']}")
+        assert page.status_code == 200 and page.headers['content-type'].startswith('text/markdown')
+        for expected in (x['id'], 'Tender API', 'join_crossover', 'sign_off_crossover', '`beta`: invited', ta['id']):
+            assert expected in page.text
+        assert client.get('/x/x-000000000000').status_code == 404
+
+
+def test_human_crosses_a_task_over_from_the_dashboard(tmp_path, monkeypatch):
+    from server import create_app
+    monkeypatch.setenv('PROJECT_DESK_STRICT', '1')
+    app = create_app(tmp_path / 'db.sqlite3', tmp_path / 'ROSTER.md')
+    store = app.state.store
+    a = store.register('alpha api agent', 'claude', '', 'main', declared(tmp_path, 'alpha'))
+    b = store.register('beta client agent', 'claude', '', 'main', declared(tmp_path, 'beta'))
+    ta = store.claim(a['session_key'], 'Tender API', ['src/api'], 'Build')
+    headers = {'X-Project-Desk': 'dashboard'}
+    with TestClient(app) as client:
+        made = client.post('/api/action', headers=headers, json={'project': 'alpha', 'action': 'crossover.start',
+                           'data': {'task_id': ta['id'], 'invite': ['beta'], 'note': 'Rohan: build the client'}})
+        assert made.status_code == 200, made.text
+        view = made.json()
+        assert view['paste_line'] and view['awaiting_join'] == ['beta']
+        invite = store.check_in(b['session_key'], include=['inbox'])['inbox']
+        assert invite[0]['from_project'] == 'alpha' and invite[0]['from_name'] == 'Human'
+        assert 'Rohan: build the client' in invite[0]['body']
+        # the task's owner is still the agent; the human only opened the door
+        assert store.get_task_context(a['session_key'], ta['id'])['task']['owner'] == a['session_id']
+        bad = client.post('/api/action', headers=headers, json={'project': 'alpha', 'action': 'crossover.start',
+                          'data': {'task_id': ta['id'], 'invite': ['nowhere']}})
+        assert bad.status_code == 400
+        wrong = client.post('/api/action', headers=headers, json={'project': 'beta', 'action': 'crossover.start',
+                            'data': {'task_id': ta['id'], 'invite': ['alpha']}})
+        assert wrong.status_code == 400
+
+
+def test_moving_a_crossover_task_between_projects_is_refused(desk, tmp_path):
+    d, a, a2, b = desk
+    ta, x, joined = crossover(d, a, b)
+    with d.connection(True) as c:   # make alpha's sessions look idle so move_project would take them
+        c.execute("UPDATE sessions SET last_seen='2000-01-01T00:00:00+00:00' WHERE project='alpha'")
+    with pytest.raises(Conflict, match='crossover'):
+        d.move_project('alpha', 'gamma', str(tmp_path / 'alpha'), apply=True)
+    assert d.move_project('alpha', 'gamma', str(tmp_path / 'alpha'))['apply'] is False   # dry run still reports

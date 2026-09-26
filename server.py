@@ -67,6 +67,50 @@ def _export_roster(store, destination, project):
     temporary.write_text('\n'.join(rows)+'\n'); temporary.replace(destination)
 
 
+def crossover_page(x, desk):
+    """The page a human pastes into the other project's agent: what this is and the exact calls."""
+    xid, cli = x['id'], ROOT / 'desk'
+    lines = [f"# Project Desk crossover {xid}: {x['title']}", '',
+             'A crossover is one piece of work shared by agents in different projects on this desk. '
+             'Each side works on its own task, in its own repo, and claims only its own paths. '
+             'Every side signs off before any side can mark its task DONE.', '',
+             f"Status: **{x['status']}**. Started from project `{x['origin_project']}`, task `{x['origin_task']}`.", '',
+             '## Members', '']
+    for m in x['members']:
+        if m['task_id']:
+            lines.append(f"- `{m['project']}` ({m['role']}): task `{m['task_id']}` \"{m.get('task_title', '')}\", "
+                         f"{m.get('task_status', '')}, owner {m.get('owner_name') or '?'} (`{m.get('owner')}`), "
+                         f"{'signed off' if m['signed_off'] else 'not signed off yet'}")
+        else:
+            lines.append(f"- `{m['project']}`: invited, not joined yet")
+    waiting = ', '.join(f'`{p}`' for p in x['awaiting_join']) or 'none'
+    lines += ['', '## If you are the agent asked to join', '',
+              f'Projects invited but not joined yet: {waiting}.', '',
+              '1. Be registered on Project Desk from your own repo (`register_session`; omit `project`). '
+              'Reuse your existing session if you already have one.',
+              '2. Join and claim your side in one call, using paths in YOUR repo:',
+              f'   `join_crossover(session_key, crossover_id="{xid}", next_step="<what you will do>", '
+              'resources=["<paths in your repo>"])`',
+              '   Already working on it under an open task? Pass `task_id="t-…"` instead of `resources`.',
+              f'3. Talk: `send_message(recipient="{xid}")` reaches every other member. '
+              'Send to a member\'s owner id (above) to reach one side directly.',
+              '4. Read the other side\'s task: `get_task_context(task_id="t-…")`.',
+              f'5. When your side works end to end: `sign_off_crossover(crossover_id="{xid}", '
+              'validation="<evidence>")`. Marking your task DONE with validation also counts as your sign-off.', '',
+              'Is your project not in the list above? Ask a member or the human to invite it: '
+              f'`start_crossover(task_id="{x["origin_task"]}", invite=["<your project>"])` '
+              '(or the Cross over button on the task in the dashboard).', '',
+              '## Tools missing?', '',
+              'The crossover tools appear after you reconnect the `project-desk` MCP server (`/mcp`). '
+              'Until then, use the fallback CLI:',
+              '```',
+              f'echo \'{{"session_key":"<yours>","crossover_id":"{xid}","next_step":"…","resources":["…"]}}\' '
+              f'| {cli} join_crossover --json-file -',
+              '```',
+              f'Dashboard: {desk}/p/{x["origin_project"]}']
+    return '\n'.join(lines) + '\n'
+
+
 class LocalOnly(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         host=request.headers.get('host','').split(':')[0]
@@ -307,6 +351,10 @@ def create_app(db=None, roster=None):
         if not p: return PlainTextResponse('Unknown project',404)
         return Response(onboarding.kit_zip(p,desk_base(request)),media_type='application/zip',
                         headers={'Content-Disposition':f'attachment; filename="project-desk-{p["slug"]}.zip"'})
+    async def crossover_join(request):
+        try: view=store.crossover(request.path_params['crossover_id'])
+        except ValueError: return PlainTextResponse('Unknown crossover',404)
+        return PlainTextResponse(crossover_page(view,desk_base(request)),media_type='text/markdown; charset=utf-8')
     async def kit_file(request):
         p=known(request.path_params['slug']); name=request.path_params['name']
         if not p: return PlainTextResponse('Unknown project',404)
@@ -341,6 +389,7 @@ def create_app(db=None, roster=None):
                         Route('/api/projects',projects_list),Route('/api/projects/{slug}/connect',connect),
                         Route('/projects',index),Route('/p/{slug}',index),Route('/p/{slug}/onboard',onboard),
                         Route('/p/{slug}/rules',rules_page),Route('/p/{slug}/kit.zip',kit),Route('/p/{slug}/files/{name}',kit_file),
+                        Route('/x/{crossover_id}',crossover_join),
                         Mount('/static',StaticFiles(directory=ROOT/'static')),Mount('/',mcp_app)],
                   lifespan=lifespan,middleware=[Middleware(LocalOnly)])
     app.state.store=store

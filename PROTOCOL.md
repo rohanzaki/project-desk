@@ -84,6 +84,12 @@ Isolation is the default; a crossover is the explicit exception.
   joined side has neither signed off nor finished; DONE with validation counts as
   that side's sign-off. The human's dashboard close is never blocked.
 
+- Every crossover view carries `join_url` (`/x/<id>`, a markdown page with the
+  exact calls) and `paste_line` for the human to paste into the other agent. The
+  dashboard's **Cross over** task button (human action `crossover.start`) opens
+  one without asking an agent; the task keeps its owner.
+- `move_project` refuses to move a task that is in a crossover.
+
 Data lives in side tables (`crossovers`, `crossover_members`, `message_links`);
 the original tables keep their shape, so older code still runs on the database.
 

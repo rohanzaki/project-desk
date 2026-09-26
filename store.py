@@ -330,6 +330,10 @@ class Store:
                 (source, *ids))] if ids else []
             task_ids = [t['id'] for t in tasks]
             tmarks = ','.join('?' * len(task_ids))
+            linked = [r[0] for r in c.execute(
+                f'SELECT task_id FROM crossover_members WHERE task_id IN ({tmarks})', task_ids)] if task_ids else []
+            if linked and apply:   # a crossover records each side's project; moving would orphan it
+                raise Conflict(f"Tasks {', '.join(linked)} are in a crossover; finish or close them before moving")
             for t in tasks:                      # open claims must not collide in the target
                 if t['status'] == 'DONE':
                     continue
@@ -1015,6 +1019,9 @@ class Store:
                      text(data['next_step'],'next step'),now()))
                 self.event(c,project,'rohan','task.queued',{'task_id':tid})
                 return self.task(c,tid)
+            if action=='crossover.start':
+                return self._start_crossover(c,project,HUMAN,'Human',self.task(c,data['task_id']),
+                                             data.get('invite',[]),data.get('note',''))
             if action=='message':
                 if str(data['recipient']).startswith('x-'):
                     return self._crossover_message(c,project,'rohan',data['recipient'],data['body'])
@@ -1144,7 +1151,14 @@ class Store:
                 'awaiting_signoff': [m['project'] for m in joined
                                      if not m['signed_off'] and m['task_status'] != 'DONE'],
                 'awaiting_join': [m['project'] for m in members if not m['task_id']],
-                'talk': f'send_message(recipient="{x["id"]}") reaches every other member'}
+                'talk': f'send_message(recipient="{x["id"]}") reaches every other member',
+                'join_url': f'{self.desk_url}/x/{x["id"]}',
+                'paste_line': f'Join Project Desk crossover {x["id"]} ("{x["title"]}") from {self.desk_url}/x/{x["id"]}'}
+
+    def crossover(self, crossover_id):
+        """Read-only view for the join page; the desk is loopback-only like /api/state."""
+        with self.connection() as c:
+            return self._crossover_view(c, crossover_id)
 
     def _crossovers_for(self, c, project, include_closed=False, limit=20):
         ids = [r[0] for r in c.execute('''SELECT x.id FROM crossovers x JOIN crossover_members m
@@ -1186,6 +1200,15 @@ class Store:
         Calling it again on a task that is already in a crossover invites more
         projects into that same crossover (and re-sends a pending invite).
         """
+        with self.connection(True) as c:
+            s = self.auth(c, key)
+            t = self.task(c, task_id)
+            if t['project'] != s['project'] or t['owner'] != s['id']:
+                raise PermissionError('Only the owner of a task in your project can open a crossover from it')
+            return self._start_crossover(c, s['project'], s['id'], s['name'], t, invite, note)
+
+    def _start_crossover(self, c, project, actor, actor_name, t, invite, note):
+        """Shared by an agent (owner of the task) and the human's dashboard."""
         if isinstance(invite, str):
             invite = [invite]
         if not isinstance(invite, list) or not invite or len(invite) > 20:
@@ -1193,67 +1216,66 @@ class Store:
         note = (note or '').strip()
         if len(note) > 4000:
             raise ValueError('Keep the invite note under 4000 characters')
-        with self.connection(True) as c:
-            s = self.auth(c, key)
-            t = self.task(c, task_id)
-            if t['project'] != s['project'] or t['owner'] != s['id']:
-                raise PermissionError('Only the owner of a task in your project can open a crossover from it')
-            if t['status'] == 'DONE':
-                raise Conflict('Completed task; start the crossover from an open task')
-            targets = []
-            for item in invite:
-                item = text(item, 'invite', 120)
-                if item.startswith('s-'):
-                    row = c.execute('SELECT project FROM sessions WHERE id=? AND imported=0', (item,)).fetchone()
-                    if not row:
-                        raise ValueError(f'Unknown session {item}')
-                    target = (row['project'], item)
-                elif valid_slug(item):
-                    target = (item, None)
-                else:
-                    raise ValueError(f'Invite a project slug or a session id, not {item!r}')
-                if target[0] == s['project']:
-                    raise ValueError(f'{item} is in your own project; a crossover invites another project. '
-                                     'Inside your project use send_message or a handoff.')
-                self._open_project(c, target[0])
-                targets.append(target)
-            crossover_id = self._crossover_of_task(c, task_id)
-            stamp = now()
-            if not crossover_id:
-                crossover_id = ident('x-')
-                c.execute('INSERT INTO crossovers VALUES(?,?,?,?,?,?,?)',
-                          (crossover_id, t['title'], s['project'], task_id, s['id'], stamp, stamp))
-                c.execute('''INSERT INTO crossover_members(crossover_id,project,task_id,invited_by,invited,joined,joined_by)
-                             VALUES(?,?,?,?,?,?,?)''', (crossover_id, s['project'], task_id, s['id'], stamp, stamp, s['id']))
-                self.event(c, s['project'], s['id'], 'crossover.started', {'crossover_id': crossover_id, 'task_id': task_id})
-            sent = []
-            for project, session_id in targets:
-                member = c.execute('SELECT task_id FROM crossover_members WHERE crossover_id=? AND project=?',
-                                   (crossover_id, project)).fetchone()
-                if member and member['task_id']:
-                    continue   # already joined
-                if not member:
-                    c.execute('''INSERT INTO crossover_members(crossover_id,project,invited_by,invited)
-                                 VALUES(?,?,?,?)''', (crossover_id, project, s['id'], stamp))
-                body = (f'CROSSOVER INVITE {crossover_id} from project {s["project"]}: {s["name"]} ({s["id"]}) '
-                        f'asks your project to work with them on "{t["title"]}" (their task {task_id}).\n'
-                        + (f'{note}\n' if note else '') +
-                        f'Join: join_crossover(crossover_id="{crossover_id}", next_step="...", '
-                        'resources=["paths in YOUR repo"]) creates your own claimed task, or pass '
-                        'task_id="<an open task you own>" to link work already claimed.\n'
-                        f'Talk: send_message(recipient="{crossover_id}") reaches every member; '
-                        f'send_message(recipient="{s["id"]}") reaches the inviter directly.\n'
-                        'Finish: every joined side signs off (sign_off_crossover, or DONE with validation) '
-                        'before any side can mark its task DONE.\n'
-                        'Tools missing? Reconnect the project-desk MCP server (/mcp) or use the desk CLI.')
-                sent.append(self._message(c, s['project'], s['id'], session_id or f'{project}:all', body,
-                                          None, crossover_id)['message_id'])
-                self.event(c, project, s['id'], 'crossover.invited',
-                           {'crossover_id': crossover_id, 'from_project': s['project']})
-            c.execute('UPDATE crossovers SET updated=? WHERE id=?', (stamp, crossover_id))
-            view = self._crossover_view(c, crossover_id)
-            view['invite_message_ids'] = sent
-            return view
+        task_id = t['id']
+        if t['project'] != project:
+            raise ValueError('Task belongs to another project')
+        if t['status'] == 'DONE':
+            raise Conflict('Completed task; start the crossover from an open task')
+        targets = []
+        for item in invite:
+            item = text(item, 'invite', 120)
+            if item.startswith('s-'):
+                row = c.execute('SELECT project FROM sessions WHERE id=? AND imported=0', (item,)).fetchone()
+                if not row:
+                    raise ValueError(f'Unknown session {item}')
+                target = (row['project'], item)
+            elif valid_slug(item):
+                target = (item, None)
+            else:
+                raise ValueError(f'Invite a project slug or a session id, not {item!r}')
+            if target[0] == project:
+                raise ValueError(f'{item} is in your own project; a crossover invites another project. '
+                                 'Inside your project use send_message or a handoff.')
+            self._open_project(c, target[0])
+            targets.append(target)
+        crossover_id = self._crossover_of_task(c, task_id)
+        stamp = now()
+        if not crossover_id:
+            crossover_id = ident('x-')
+            c.execute('INSERT INTO crossovers VALUES(?,?,?,?,?,?,?)',
+                      (crossover_id, t['title'], project, task_id, actor, stamp, stamp))
+            c.execute('''INSERT INTO crossover_members(crossover_id,project,task_id,invited_by,invited,joined,joined_by)
+                         VALUES(?,?,?,?,?,?,?)''', (crossover_id, project, task_id, actor, stamp, stamp, actor))
+            self.event(c, project, actor, 'crossover.started', {'crossover_id': crossover_id, 'task_id': task_id})
+        sent = []
+        for target_project, session_id in targets:
+            member = c.execute('SELECT task_id FROM crossover_members WHERE crossover_id=? AND project=?',
+                               (crossover_id, target_project)).fetchone()
+            if member and member['task_id']:
+                continue   # already joined
+            if not member:
+                c.execute('''INSERT INTO crossover_members(crossover_id,project,invited_by,invited)
+                             VALUES(?,?,?,?)''', (crossover_id, target_project, actor, stamp))
+            body = (f'CROSSOVER INVITE {crossover_id} from project {project}: {actor_name} ({actor}) '
+                    f'asks your project to work with them on "{t["title"]}" (their task {task_id}).\n'
+                    + (f'{note}\n' if note else '') +
+                    f'Join: join_crossover(crossover_id="{crossover_id}", next_step="...", '
+                    'resources=["paths in YOUR repo"]) creates your own claimed task, or pass '
+                    'task_id="<an open task you own>" to link work already claimed.\n'
+                    f'Talk: send_message(recipient="{crossover_id}") reaches every member; '
+                    f'send_message(recipient="{actor}") reaches the inviter directly.\n'
+                    f'Join page with the full steps: {self.desk_url}/x/{crossover_id}\n'
+                    'Finish: every joined side signs off (sign_off_crossover, or DONE with validation) '
+                    'before any side can mark its task DONE.\n'
+                    'Tools missing? Reconnect the project-desk MCP server (/mcp) or use the desk CLI.')
+            sent.append(self._message(c, project, actor, session_id or f'{target_project}:all', body,
+                                      None, crossover_id)['message_id'])
+            self.event(c, target_project, actor, 'crossover.invited',
+                       {'crossover_id': crossover_id, 'from_project': project})
+        c.execute('UPDATE crossovers SET updated=? WHERE id=?', (stamp, crossover_id))
+        view = self._crossover_view(c, crossover_id)
+        view['invite_message_ids'] = sent
+        return view
 
     def join_crossover(self, key, crossover_id, next_step, resources=None, task_id=None, title=''):
         """Join a crossover your project was invited to, with a new or an existing task of yours."""
