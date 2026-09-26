@@ -604,6 +604,10 @@ document.addEventListener('change',event=>{
   mutate('action.resolve',{item_id:box.dataset.actionItem,status:box.checked?'done':'open'}).then(refresh).catch(error=>{$('#notice').textContent=error.message;box.checked=!box.checked;});
 });
 $('#action-filter').addEventListener('change',renderActionItems);
+$('#announce-restart').addEventListener('click',()=>openEditor('Announce a Project Desk restart',
+  '<p class="dialog-hint">Posts the notice to every active project\'s board. The desk posts "Project Desk is back" by itself after it starts. VS Code sessions that are not connected to the desk do not see this.</p>'+
+  field('Starts in (seconds)','seconds','text','60')+field('Reason (optional)','reason','text','',[],false),
+  async data=>{const result=await mutate('desk.announce',data);$('#notice').textContent='Restart announced to: '+Object.keys(result.announced_to||{}).join(', ');},'Announce'));
 $('#new-action').addEventListener('click',()=>openEditor('Add action points',
   field('One per line','body','textarea')+
   field('For','assignee','select','human',[{value:'human',label:'Me (the human)'},{value:'agents',label:'Any agent in this project'}]),

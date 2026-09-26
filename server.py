@@ -3,6 +3,7 @@ import contextlib
 import json
 import logging
 import os
+import subprocess
 import threading
 from pathlib import Path
 
@@ -25,6 +26,15 @@ PROJECT=os.environ.get('PROJECT_DESK_PROJECT','default')
 ROSTER_PROJECT=os.environ.get('PROJECT_DESK_ROSTER_PROJECT',PROJECT)
 PORT=int(os.environ.get('PROJECT_DESK_PORT','7331'))
 STALE_HOURS=float(os.environ.get('PROJECT_DESK_STALE_HOURS','6'))
+ANNOUNCE_RESTART=os.environ.get('PROJECT_DESK_ANNOUNCE_RESTART','0')=='1'
+
+
+def running_version():
+    try:
+        out=subprocess.run(['git','-C',str(ROOT),'rev-parse','--short','HEAD'],capture_output=True,text=True,timeout=2)
+        return out.stdout.strip() if out.returncode==0 else ''
+    except (OSError,subprocess.TimeoutExpired):
+        return ''
 INSTRUCTIONS='''Project Desk is the shared coordination system for the humans and the coding
 agents (Claude Code, Codex, and any other MCP client) working on a codebase.
 Register one identity per real session; keep session_key private. Your project is named in
@@ -144,11 +154,12 @@ class LocalOnly(BaseHTTPMiddleware):
         return response
 
 
-def create_app(db=None, roster=None):
+def create_app(db=None, roster=None, announce=None):
     store=Store(db or os.environ.get('PROJECT_DESK_DB',str(ROOT/'data/desk.sqlite3')),
                 strict=os.environ.get('PROJECT_DESK_STRICT','0')=='1',
                 default_project=PROJECT, desk_url=f'http://127.0.0.1:{PORT}')
     roster=Path(roster or os.environ.get('PROJECT_DESK_ROSTER',str(ROOT.parent/'ROSTER.md')))
+    app_announce=ANNOUNCE_RESTART if announce is None else announce
     mcp=FastMCP('Project Desk',instructions=INSTRUCTIONS,stateless_http=True,json_response=True,
                 max_request_body_size=65536,
                 transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=True,
@@ -271,6 +282,13 @@ def create_app(db=None, roster=None):
         """Read the crossover's agreed contract (API schema, example payloads), or pass body to publish a new
         version. A new version clears every sign-off, so each side re-validates against it."""
         return store.crossover_contract(session_key,crossover_id,body)
+
+    @mcp.tool()
+    def announce_desk_restart(session_key:str,starts_in_seconds:int=60,reason:str='')->dict:
+        """Before restarting Project Desk: post the restart notice to EVERY active project's board (all projects,
+        cross-project) in one call. Requires holding service:project-desk. Then also message every VS Code peer
+        (ListAgents/SendMessage), back up the DB and restart; the desk posts the BACK notice itself on startup."""
+        return store.announce_desk_restart(session_key,starts_in_seconds,reason)
 
     @mcp.tool()
     def add_action_items(session_key:str,items:list[str],task_id:str|None=None,assignee:str='human')->dict:
@@ -518,6 +536,9 @@ def create_app(db=None, roster=None):
     @contextlib.asynccontextmanager
     async def lifespan(app):
         async with mcp.session_manager.run():
+            if app_announce:
+                try: await asyncio.to_thread(store.announce_desk_back,running_version())
+                except Exception: logging.exception('Project Desk back-online notice failed')
             task=asyncio.create_task(maintain())
             try: yield
             finally:

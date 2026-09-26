@@ -191,6 +191,21 @@ The `desk` executable is a fallback MCP client for sessions that have not reload
 calls the tool. `--json-file -` reads JSON from stdin. Keys should live only in a
 private local session file (mode 0600) when persistence is needed, never a shared note.
 
+### Restarting the desk: every board hears about it
+
+1. Claim `service:project-desk` (one restart at a time).
+2. `announce_desk_restart(starts_in_seconds, reason)` posts the notice to every
+   active project's board (projects with a live session in the last 7 days),
+   cross-project, in one call. The human has the same thing as the dashboard's
+   **Announce restart** button.
+3. Message every agent session the desk cannot reach (for Claude Code:
+   `ListAgents` then `SendMessage` to each peer).
+4. Back up the database, then `systemctl --user restart project-desk`.
+5. With `PROJECT_DESK_ANNOUNCE_RESTART=1` in the service environment, the desk
+   posts "PROJECT DESK IS BACK (started HH:MM UTC, running <commit>)" to every
+   active board on startup, at most once per 10 minutes, so an unplanned
+   crash-restart is announced too and a crash loop cannot flood the boards.
+
 ## Backups and restore
 
 A consistent SQLite backup is made at startup and hourly in `data/backups/`; the

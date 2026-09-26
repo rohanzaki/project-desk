@@ -966,6 +966,65 @@ class FeaturesMixin:
             out.append(item)
         return out
 
+    # ---- 13. desk restart notices reach every project's board -------------------
+
+    BACK_NOTICE = 'PROJECT DESK IS BACK'
+
+    def _active_projects(self, c, days=7):
+        """Projects a live agent has used recently; notices go to each one's board."""
+        return [r[0] for r in c.execute(
+            '''SELECT p.slug FROM projects p WHERE p.archived=0 AND EXISTS
+               (SELECT 1 FROM sessions s WHERE s.project=p.slug AND s.imported=0 AND s.last_seen>?)
+               ORDER BY p.slug''', (_ago(hours=24 * days),))]
+
+    def _restart_body(self, who, seconds, reason):
+        when = f'{seconds // 60} min' if seconds >= 120 else f'{seconds} s'
+        return (f'PROJECT DESK RESTART in ~{when} ({who})' + (f': {reason}' if reason else '') +
+                '. About 1 s down. Nothing is lost: tasks, claims, messages and your session_key stay valid; '
+                'do not re-register. If a desk call fails in that window, retry it once. A "PROJECT DESK IS BACK" '
+                'notice follows.')
+
+    def _broadcast_all(self, c, origin, sender, body):
+        sent = {}
+        for slug in self._active_projects(c):
+            recipient = 'all' if slug == origin else f'{slug}:all'
+            sent[slug] = self._message(c, origin, sender, recipient, body, None, kind='fyi')['message_id']
+        return sent
+
+    def announce_desk_restart(self, key, starts_in_seconds=60, reason=''):
+        seconds = _int(starts_in_seconds, 'starts_in_seconds')
+        if seconds is None or not 0 <= seconds <= 3600:
+            raise ValueError('starts_in_seconds must be 0–3600')
+        reason = (reason or '').strip()[:500]
+        with self.connection(True) as c:
+            s = self.auth(c, key)
+            holds = c.execute("SELECT 1 FROM claims cl JOIN tasks t ON t.id=cl.task_id "
+                              "WHERE cl.resource='service:project-desk' AND t.owner=? AND t.status!='DONE'",
+                              (s['id'],)).fetchone()
+            if not holds:
+                raise PermissionError('Claim service:project-desk first: only the session doing the restart announces it')
+            body = self._restart_body(f"by {s['name']}, {s['id']}, project {s['project']}", seconds, reason)
+            sent = self._broadcast_all(c, s['project'], s['id'], body)
+            self.event(c, s['project'], s['id'], 'desk.restart_announced', {'projects': sorted(sent), 'seconds': seconds})
+            return {'announced_to': sent,
+                    'next': 'Also SendMessage every VS Code peer from ListAgents (the desk cannot reach sessions that '
+                            'are not connected to it), back up the database, then restart. The desk posts the BACK '
+                            'notice to every board by itself on startup.'}
+
+    def announce_desk_back(self, version='', quiet_minutes=10):
+        """Posted by the server at startup, to every active project's board, at most once per quiet_minutes."""
+        with self.connection(True) as c:
+            recent = c.execute('''SELECT 1 FROM messages WHERE sender=? AND body LIKE ? AND created>? LIMIT 1''',
+                               (SYSTEM, self.BACK_NOTICE + '%', _ago(minutes=quiet_minutes))).fetchone()
+            if recent:   # a crash loop must not flood every board
+                return {}
+            started = datetime.now(timezone.utc).strftime('%H:%M UTC')
+            body = (f"{self.BACK_NOTICE} (started {started}" + (f', running {version}' if version else '') + '). '
+                    'Nothing was lost: tasks, claims, messages and session keys are intact; keep your key. If this '
+                    'release added tools, reconnect project-desk in /mcp.')
+            return {slug: self._message(c, slug, SYSTEM, 'all', body, None, kind='fyi')['message_id']
+                    for slug in self._active_projects(c)}
+
     # ---- 11. an agent reopens a finished task it needs -------------------------
 
     def reopen_task(self, key, task_id, reason, next_step):

@@ -1057,6 +1057,11 @@ class Store(FeaturesMixin):
                      text(data['next_step'],'next step'),now()))
                 self.event(c,project,'rohan','task.queued',{'task_id':tid})
                 return self.task(c,tid)
+            if action=='desk.announce':
+                seconds=int(data.get('seconds') or 60)
+                if not 0<=seconds<=3600: raise ValueError('seconds must be 0–3600')
+                body=self._restart_body('by the human',seconds,(data.get('reason') or '').strip()[:500])
+                return {'announced_to':self._broadcast_all(c,project,HUMAN,body)}
             if action=='action.add':
                 items=data.get('items') or data.get('body') or []
                 if isinstance(items,str): items=[line.strip(' -*[]\t') for line in items.splitlines() if line.strip(' -*[]\t')]
